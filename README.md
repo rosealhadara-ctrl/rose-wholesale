@@ -62,3 +62,7 @@ pytest
 - `app/wholesale_points.py`: نقاط الجملة والمكافآت.
 - `app/wholesale_*.py`: باقي الجملة (الأصناف، الطلبات، الدفع، التجهيز، التوصيل، المرتجعات، روز بلس، التقارير، النواقص، المحادثات، فريق التاجر).
 - `docs/`: مواصفات الجملة وخطة البناء.
+
+## سكربتات جهاز النشر (ويندوز)
+
+`deploy/windows/ROSE_GOMLA_SETUP.cmd`: بيعمل خدمة Railway للجملة (volume ومتغيرات ودومين gomla.sheout-eg.com). بيتشغل من `F:\Rose-Claude\deploy` وبيكتب النتيجة في `logs\gomla-setup.txt`. كلمة سر المالك بتتحفظ على الجهاز بس في `F:\Rose-Claude\secrets` ومش بتترفع على GitHub.
