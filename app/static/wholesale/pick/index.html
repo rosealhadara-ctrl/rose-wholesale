@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#3B2A2F">
+  <meta name="robots" content="noindex">
+  <title>روز | التجهيز والتوصيل</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/static/wholesale/trader/trader.css?v=8">
+  <link rel="stylesheet" href="/static/wholesale/pick/pick.css?v=2">
+  <script src="/static/wholesale/pick/pick.js?v=3" defer></script>
+</head>
+<body class="pick">
+  <header class="top">
+    <div class="top-row">
+      <a class="brand" href="#queue">
+        <span class="logo"><img src="/api/branding/logo" alt="روز" onerror="this.src='/static/icon.svg'"></span>
+        <span><b>روز للموظفين</b><small id="who"></small></span>
+      </a>
+      <button class="btn sm ghost light" id="logout" hidden>خروج</button>
+    </div>
+    <div class="seg top-tabs" id="tabs" hidden role="tablist">
+      <button data-tab="queue" aria-pressed="true">التجهيز</button>
+      <button data-tab="receiving" aria-pressed="false">الاستلام</button>
+      <button data-tab="returns" aria-pressed="false">المرتجعات</button>
+      <button data-tab="trips" aria-pressed="false">مشاويري</button>
+    </div>
+  </header>
+  <main id="view" aria-live="polite"></main>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

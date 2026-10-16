@@ -1,0 +1,56 @@
+body.pick { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
+.btn.light { color: #fff; border-color: rgba(255,255,255,.3); }
+.top-tabs { max-width: 960px; margin: 10px auto 0; background: rgba(255,255,255,.1); }
+.top-tabs button { color: #F4E6E9; }
+.top-tabs button[aria-pressed="true"] { background: #fff; color: var(--header); }
+
+.stat-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.stat-box { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px; text-align: center; }
+.stat-box b { display: block; font-size: 22px; }
+.stat-box span { font-size: 12px; color: var(--muted); }
+
+.job { display: grid; gap: 6px; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+.job + .job { margin-top: 10px; }
+.job.mine { border-color: var(--accent); box-shadow: 0 0 0 2px var(--pink-soft); }
+.job.locked { opacity: .6; }
+.job-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.job-head b { font-size: 18px; }
+.tag { display: inline-flex; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 700; }
+.tag.note { background: var(--pink-soft); color: var(--accent-dark); }
+.tag.prio { background: var(--amber-bg); color: var(--amber); }
+.tag.lock { background: #EFE9E7; color: var(--muted); }
+.tag.me { background: var(--green-bg); color: var(--green); }
+
+.timer-bar { position: sticky; top: 0; z-index: 5; background: var(--header); color: #fff; border-radius: 0 0 16px 16px; margin: -14px -16px 12px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+.timer { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 1px; direction: ltr; }
+.timer-bar .meta { flex: 1; font-size: 13px; color: #F4E6E9; }
+.timer-bar .meta b { color: #fff; font-size: 16px; display: block; }
+
+.pick-item { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 14px; display: grid; gap: 10px; }
+.pick-item + .pick-item { margin-top: 10px; }
+.pick-item.ready { border-color: #BFD9CB; background: #F6FBF8; }
+.pick-item.short { border-color: #EBCFA8; background: #FFFAF2; }
+.pick-item.missing { border-color: #EBC1C8; background: #FFF6F7; }
+.pick-name { font-size: 17px; font-weight: 600; }
+.pick-qty { font-size: 26px; font-weight: 700; color: var(--accent-dark); }
+.pick-qty small { font-size: 15px; font-weight: 500; color: var(--muted); }
+.pick-note { background: var(--pink-soft); color: var(--accent-dark); border-radius: 10px; padding: 8px 12px; font-weight: 600; }
+.pick-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.pick-actions .btn { min-height: 52px; padding: 6px; }
+.pick-actions .btn.on-ready { background: var(--green); border-color: var(--green); color: #fff; }
+.pick-actions .btn.on-short { background: var(--amber); border-color: var(--amber); color: #fff; }
+.pick-actions .btn.on-missing { background: var(--red); border-color: var(--red); color: #fff; }
+.short-row { display: flex; gap: 8px; align-items: center; }
+.short-row input { width: 100px; text-align: center; font-size: 18px; font-weight: 700; }
+
+.finish-bar { position: fixed; inset-inline: 0; bottom: 0; background: #fff; border-top: 1px solid var(--line); padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); z-index: 10; }
+.finish-bar .btn { width: 100%; max-width: 928px; margin: 0 auto; display: flex; min-height: 56px; font-size: 17px; }
+.finish-bar small { display: block; text-align: center; color: var(--muted); margin-bottom: 6px; }
+
+.pin { font-size: 28px; letter-spacing: 14px; text-align: center; font-weight: 700; direction: ltr; }
+.done-time { font-size: 44px; font-weight: 700; color: var(--green); direction: ltr; font-variant-numeric: tabular-nums; }
+.recv-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.recv-row:last-of-type { border-bottom: 0; }
+.recv-row input { width: 90px; text-align: center; font-weight: 700; font-size: 17px; }
+.recv-row label { display: grid; gap: 2px; text-align: center; }
+.recv-row label input { width: 64px; }

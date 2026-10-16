@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>دخول الإدارة · روز جملة</title>
+<link rel="icon" href="/api/branding/logo">
+<style>
+  :root { --ink:#1d1d1f; --muted:#6e6e73; --line:#e3e3e8; --brand:#c2185b; --bg:#f6f4f7; }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; background:var(--bg); color:var(--ink); font:16px/1.6 system-ui, "Segoe UI", Tahoma, sans-serif; padding:16px; }
+  form { width:100%; max-width:380px; background:#fff; border:1px solid var(--line); border-radius:18px; padding:28px 22px; display:grid; gap:14px; box-shadow:0 10px 30px rgba(0,0,0,.05); }
+  .head { display:flex; align-items:center; gap:12px; }
+  .head img { width:48px; height:48px; object-fit:contain; border-radius:12px; }
+  h1 { margin:0; font-size:20px; } .head span { color:var(--muted); font-size:14px; }
+  label { display:grid; gap:6px; font-size:14px; color:var(--muted); }
+  input { font:inherit; padding:12px 14px; border:1px solid var(--line); border-radius:12px; min-height:48px; color:var(--ink); }
+  input:focus { outline:2px solid var(--brand); outline-offset:1px; }
+  button { font:inherit; font-weight:700; min-height:48px; border:0; border-radius:12px; background:var(--brand); color:#fff; cursor:pointer; }
+  button:disabled { opacity:.6; }
+  .err { color:#b00020; font-size:14px; min-height:1.2em; margin:0; }
+</style>
+</head>
+<body>
+<form id="f" autocomplete="on">
+  <div class="head"><img src="/api/branding/logo" alt=""><div><h1>دخول الإدارة</h1><span>روز جملة</span></div></div>
+  <label>اسم الدخول<input id="u" name="username" autocomplete="username" dir="ltr" required maxlength="40"></label>
+  <label>كلمة السر<input id="p" name="password" type="password" autocomplete="current-password" dir="ltr" required maxlength="128"></label>
+  <p class="err" id="e" role="alert"></p>
+  <button id="b">دخول</button>
+</form>
+<script>
+  const f = document.getElementById('f'), b = document.getElementById('b'), e = document.getElementById('e');
+  const next = (() => { const n = new URLSearchParams(location.search).get('next') || '/admin/wholesale/'; return n.startsWith('/') && !n.startsWith('//') ? n : '/admin/wholesale/'; })();
+  f.onsubmit = async (ev) => {
+    ev.preventDefault(); b.disabled = true; e.textContent = '';
+    try {
+      const r = await fetch('/api/staff/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ username: document.getElementById('u').value.trim(), password: document.getElementById('p').value }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : 'مقدرناش ندخلك. جرّب تاني.');
+      location.replace(next);
+    } catch (err) { e.textContent = err.message; b.disabled = false; }
+  };
+</script>
+</body>
+</html>

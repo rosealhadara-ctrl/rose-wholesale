@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#3B2A2F">
+  <title>روز جملة | الإدارة</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/static/wholesale/admin/wholesale.css?v=6">
+  <script src="/static/wholesale/admin/app.js?v=8" defer></script>
+</head>
+<body>
+  <header class="ws-header">
+    <div class="ws-brand">
+      <span class="ws-logo"><img src="/api/branding/logo" alt="روز" onerror="this.src='/static/icon.svg'"></span>
+      <div><span class="ws-kicker">روز جملة</span><h1>إدارة الجملة</h1></div>
+    </div>
+    <nav class="ws-links">
+      <a href="/wholesale/" target="_blank" rel="noopener">شاشة التاجر</a>
+      <a href="/pick/" target="_blank" rel="noopener">شاشة الموظفين</a>
+      <button class="btn-link" id="staff-logout" type="button">خروج</button>
+    </nav>
+  </header>
+
+  <nav class="ws-tabs" role="tablist" aria-label="أقسام الجملة">
+    <button role="tab" data-view="orders" aria-selected="true">الطلبات <span class="ws-count" id="orders-badge" hidden></span></button>
+    <button role="tab" data-view="reports">التقارير</button>
+    <button role="tab" data-view="points">النقاط</button>
+    <button role="tab" data-view="plus">روز بلس <span class="ws-count" id="plus-badge" hidden></span></button>
+    <button role="tab" data-view="returns">المرتجعات <span class="ws-count" id="returns-badge" hidden></span></button>
+    <button role="tab" data-view="delivery">التوصيل <span class="ws-count" id="delivery-badge" hidden></span></button>
+    <button role="tab" data-view="employees">الموظفين</button>
+    <button role="tab" data-view="payments">المدفوعات <span class="ws-count" id="payments-badge" hidden></span></button>
+    <button role="tab" data-view="credit">الآجل</button>
+    <button role="tab" data-view="shortages">النواقص <span class="ws-count" id="shortages-badge" hidden></span></button>
+    <button role="tab" data-view="traders">التجار <span class="ws-count" id="traders-badge" hidden></span></button>
+    <button role="tab" data-view="products">الأصناف</button>
+    <button role="tab" data-view="import">رفع شيت</button>
+    <button role="tab" data-view="suppliers">الموردين</button>
+    <button role="tab" data-view="pricing">الفئات والتسعير</button>
+    <button role="tab" data-view="subscription">الاشتراك <span class="ws-count" id="pending-badge" hidden></span></button>
+    <button role="tab" data-view="feedback">الشكاوى <span class="ws-count" id="feedback-badge" hidden></span></button>
+    <button role="tab" data-view="ratings">التقييمات</button>
+    <button role="tab" data-view="chats">المحادثات <span class="ws-count" id="chats-badge" hidden></span></button>
+    <button role="tab" data-view="settings">الإعدادات</button>
+  </nav>
+
+  <main id="view" class="ws-main" aria-live="polite"></main>
+
+  <aside id="drawer" class="ws-drawer" hidden aria-label="تفاصيل الصنف">
+    <div class="ws-drawer-panel" id="drawer-panel"></div>
+  </aside>
+
+  <div id="toast" class="ws-toast" role="status" hidden></div>
+</body>
+</html>

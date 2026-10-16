@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#3B2A2F">
+  <title>روز جملة</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/static/wholesale/trader/trader.css?v=8">
+  <script src="/static/wholesale/trader/trader.js?v=9" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="top-row">
+      <a class="brand" href="#catalog">
+        <span class="logo"><img src="/api/branding/logo" alt="روز" onerror="this.src='/static/icon.svg'"></span>
+        <span><b>روز جملة</b><small id="shop-name"></small></span>
+      </a>
+      <span class="top-actions">
+      <button class="icon-btn" id="top-chat" aria-label="المحادثات" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4V5Z"/><path d="M8 9h8M8 12h5"/></svg>
+        <span class="dot" id="top-chat-count" hidden></span>
+      </button>
+      <button class="icon-btn" id="top-cart" aria-label="السلة" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.4 11h10.2L20 7H6.2"/><circle cx="9" cy="19.5" r="1.5"/><circle cx="17" cy="19.5" r="1.5"/></svg>
+        <span class="dot" id="top-cart-count" hidden></span>
+      </button>
+      </span>
+    </div>
+    <div class="search-row" id="search-row" hidden>
+      <input type="search" id="search" placeholder="دوّر على صنف" aria-label="دوّر على صنف" enterkeyhint="search">
+    </div>
+  </header>
+
+  <main id="view" aria-live="polite"></main>
+
+  <div class="cart-bar" id="cart-bar" hidden>
+    <button id="open-cart"><span id="cart-bar-text"></span><b>السلة</b></button>
+  </div>
+
+  <nav class="bottom-nav" id="bottom-nav" hidden aria-label="التنقل">
+    <a href="#catalog" data-nav="catalog">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h16l-1.2-5H5.2L4 9Z"/><path d="M5.5 9v11h13V9M10 20v-5h4v5"/></svg><span>الجملة</span></a>
+    <a href="#orders" data-nav="orders">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z"/><path d="M9 8h6M9 12h6"/></svg><span>طلباتي</span></a>
+    <a href="#shortages" data-nav="shortages">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5V4Z"/><path d="M9 10h6M9 14h4"/></svg><span>النواقص</span><i class="badge-dot" id="short-dot" hidden></i></a>
+    <a href="#notifications" data-nav="notifications">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15L6 16Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg><span>الإشعارات</span><i class="badge-num" id="notif-count" hidden></i></a>
+    <a href="#account" data-nav="account">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span>حسابي</span><i class="badge-dot red" id="account-dot" hidden></i></a>
+  </nav>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
