@@ -1,0 +1,27 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "تشغيل السيرفر محليًا",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "app.main:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8100",
+        "--reload"
+      ],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/.packages",
+        "WHOLESALE_OWNER_USERNAME": "owner",
+        "WHOLESALE_OWNER_DISPLAY_NAME": "Owner",
+        "WHOLESALE_OWNER_PASSWORD": "Local-owner-123"
+      },
+      "jinja": false,
+      "justMyCode": true
+    }
+  ]
+}

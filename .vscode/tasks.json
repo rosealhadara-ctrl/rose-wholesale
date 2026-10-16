@@ -1,0 +1,36 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "تشغيل المشروع (run.ps1)",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ./run.ps1",
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "تثبيت الحزم",
+      "type": "shell",
+      "command": "python -m pip install --upgrade --target .packages -r requirements.txt",
+      "problemMatcher": []
+    },
+    {
+      "label": "تشغيل الاختبارات",
+      "type": "shell",
+      "command": "python -m pytest -q",
+      "options": {
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}/.packages"
+        }
+      },
+      "problemMatcher": [],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      }
+    }
+  ]
+}
