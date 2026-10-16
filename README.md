@@ -96,13 +96,76 @@
 | `WHOLESALE_STAFF_SESSION_HOURS` | مدة دخول الإدارة. |
 | `WHOLESALE_TIMEZONE` | المنطقة الزمنية للتقارير (افتراضي `Africa/Cairo`). |
 
-## النشر على Railway
+## الوضع الحالي على Railway
 
-1. خدمة جديدة من الريبو ده (بيبني من `Dockerfile`، والفحص على `/api/health`).
-2. Volume على `/data`.
-3. المتغيرات اللي فوق، وبعدين الدومين.
+| إيه | القيمة |
+|---|---|
+| المشروع والبيئة | `yaseer-loyalty-trial` ← `production` (نفس مشروع المتجر، بس خدمة منفصلة) |
+| الخدمة | `rose-wholesale`، وبتنشر لوحدها من فرع `main` في الريبو ده |
+| الرابط | <https://rose-wholesale-production.up.railway.app> |
+| الدومين | `gomla.sheout-eg.com` (محتاج سجلات DNS تحت) |
+| مكان التخزين | Volume اسمه `rose-wholesale-volume` على `/data`، **منفصل عن داتا المتجر** |
+| البناء | من `Dockerfile`، والفحص على `/api/health` (موجود في `railway.toml`) |
 
-> مهم: الـ volume هو اللي فيه كل البيانات. خد نسخة منه قبل أي تحديث كبير.
+### الداتا بتتخزن فين
+كل الداتا على Railway جوه `rose-wholesale-volume`:
+- `/data/wholesale.db`: التجار وحساباتهم، والأصناف والأسعار، والطلبات، والدفع، والمرتجعات، ونقاط الجملة والمكافآت، وحسابات الإدارة والموظفين، والإعدادات.
+- `/data/wholesale_images`: صور الأصناف.
+- `/data/wholesale_payments`: صور التحويلات.
+- `/data/wholesale_returns`: صور المرتجعات.
+- `/data/wholesale_voice`: رسائل كشكول النواقص الصوتية.
+- `/data/branding`: اللوجو.
+
+**GitHub فيه الكود بس.** والتحديثات ما بتمسحش الداتا، لأن الـ Volume بيفضل زي ما هو مع كل نشر جديد.
+
+> **ملاحظة:** داتا الجملة القديمة (التجار والطلبات اللي اتعملت قبل الفصل) لسه جوه قاعدة المتجر `/data/loyalty.db` في خدمة `yaseer-loyalty-trial`، ولسه ما اتنقلتش هنا.
+
+### المتغيرات المتسجلة في Railway
+- `WHOLESALE_ENV=production`
+- `WHOLESALE_COOKIE_SECURE=1`
+- `WHOLESALE_DB_PATH=/data/wholesale.db`
+- `WHOLESALE_OWNER_USERNAME=rose`
+- `WHOLESALE_OWNER_DISPLAY_NAME`
+- `WHOLESALE_OWNER_PASSWORD`: **سرّية**، ومحفوظة على جهاز النشر في `F:\Rose-Claude\secrets\gomla-owner-password.txt`
+
+حساب المالك بيتعمل مرة واحدة بس، لو مفيش مالك. لو غيّرتي كلمة السر من الإدارة، القيمة اللي في Railway بتبطل تأثر.
+
+### الدخول على الموقع
+- **الإدارة:** `/staff-login/`، باسم الدخول `rose`، وكلمة السر من الملف اللي فوق.
+- **التجار:** `/wholesale/`. التاجر بيعمل حسابه بنفسه، وأنتي بتوافقي عليه من «التجار».
+
+### الدومين gomla.sheout-eg.com
+السجلين دول بيتضافوا في إعدادات DNS بتاعة `sheout-eg.com`:
+
+| النوع | الاسم | القيمة |
+|---|---|---|
+| CNAME | `gomla` | `b789e1uc.up.railway.app` |
+| TXT | `_railway-verify.gomla` | القيمة في Railway ← الخدمة ← Settings ← Networking، أو في `F:\Rose-Claude\deploy\logs\gomla-setup.txt` |
+
+لو الدومين على Cloudflare، سطر الـ CNAME لازم يبقى **DNS only** (السحابة رمادي).
+
+### النشر والتحديث
+1. اشتغلي على فرع جديد، والاختبارات لازم تنجح.
+2. لو التحديث فيه تغيير في الداتا، خدي **نسخة احتياطية** من `/data/wholesale.db` الأول. بتتعمل بـ `railway ssh` من جهاز النشر، أو من تبويب **Backups** في Railway.
+3. ادمجي على `main`، وRailway هيبني وينشر لوحده.
+4. اتأكدي إن `/api/health` بترجّع `{"status":"ok","app":"rose-wholesale"}`.
+5. **الرجوع لو حصلت مشكلة:** رجّعي `main` للـ commit اللي قبله.
+
+### إعداد خدمة جديدة من الصفر (لو اتمسحت مثلًا)
+1. في Railway: **Add ← GitHub Repository ← rose-wholesale**.
+2. ضيفي Volume على `/data` من الخدمة نفسها. اتأكدي إنه متربط بخدمة `rose-wholesale` مش بخدمة المتجر.
+3. حطي المتغيرات اللي فوق، وبعدين Generate Domain وCustom Domain.
+4. السكربت `deploy/windows/ROSE_GOMLA_SETUP.cmd` بيعمل الخطوة 3 من جهاز النشر.
+   - بس **ما تعتمديش عليه في الـ Volume.** `railway volume list` بيعرض volumes المشروع كله، فممكن يفتكر إن فيه volume وهو مش موجود.
+
+### حاجات لازم تتعمل
+- **Railway لسه في فترة التجربة.** لما الرصيد يخلص، الجملة والمتجر الاتنين هيقفوا. محتاج ترقية لخطة Hobby أو أعلى.
+- **سجلات DNS** لدومين gomla.
+- **نقل داتا الجملة القديمة** من خدمة المتجر، بنسخة احتياطية وموافقة. التجار القدام هيحتاجوا كلمة سر مؤقتة.
+- **`railway.toml`** محتاج يتنقل بـ `railway config migrate` قبل 2026-12-01.
+
+### المشروع التاني
+المتجر والولاء والكاشير في ريبو `rose-store`. الـ README بتاعه فيه الصورة الكاملة للنظام: الكمبيوتر الأساسي، واليسير، والمزامنة، وجهاز النشر.
 
 ## الملفات
 
