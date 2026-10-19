@@ -60,7 +60,7 @@
 - **«address already in use»:** فيه نسخة شغالة قبل كده. اقفلي الترمينال القديم أو اعملي restart للجهاز.
 - **الحزم باظت:** امسحي فولدر `.packages` وشغّلي تاني.
 
-## الصفحات على الموقع (https://gomla.sheout-eg.com)
+## الصفحات على الموقع (https://gomltha.com)
 
 | الصفحة | الرابط |
 |---|---|
@@ -103,7 +103,7 @@
 | المشروع والبيئة | `yaseer-loyalty-trial` ← `production` (نفس مشروع المتجر، بس خدمة منفصلة) |
 | الخدمة | `rose-wholesale`، وبتنشر لوحدها من فرع `main` في الريبو ده |
 | الرابط | <https://rose-wholesale-production.up.railway.app> |
-| الدومين | `gomla.sheout-eg.com` (محتاج سجلات DNS تحت) |
+| الدومين | `gomltha.com` (متسجل في Hostinger، والسجلات تحت) |
 | مكان التخزين | Volume اسمه `rose-wholesale-volume` على `/data`، **منفصل عن داتا المتجر** |
 | البناء | من `Dockerfile`، والفحص على `/api/health` (موجود في `railway.toml`) |
 
@@ -118,7 +118,7 @@
 
 **GitHub فيه الكود بس.** والتحديثات ما بتمسحش الداتا، لأن الـ Volume بيفضل زي ما هو مع كل نشر جديد.
 
-> **ملاحظة:** داتا الجملة القديمة (التجار والطلبات اللي اتعملت قبل الفصل) لسه جوه قاعدة المتجر `/data/loyalty.db` في خدمة `yaseer-loyalty-trial`، ولسه ما اتنقلتش هنا.
+> **ملاحظة:** الجملة اللي جوه موقع القطاعي ما كانش فيها تجار ولا طلبات حقيقية، فمفيش داتا هتتنقل منها. وقرار صاحب المشروع إن القطاعي يفضل زي ما هو، من غير ما نقرا منه ولا نغيّر فيه أي حاجة.
 
 ### المتغيرات المتسجلة في Railway
 - `WHOLESALE_ENV=production`
@@ -134,15 +134,17 @@
 - **الإدارة:** `/staff-login/`، باسم الدخول `rose`، وكلمة السر من الملف اللي فوق.
 - **التجار:** `/wholesale/`. التاجر بيعمل حسابه بنفسه، وأنتي بتوافقي عليه من «التجار».
 
-### الدومين gomla.sheout-eg.com
-السجلين دول بيتضافوا في إعدادات DNS بتاعة `sheout-eg.com`:
+### الدومين gomltha.com
+الدومين متسجل في **Hostinger**، والسجلات بتتضاف من hPanel، من صفحة **Domains ← gomltha.com ← DNS / Nameservers**:
 
-| النوع | الاسم | القيمة |
+| النوع في Hostinger | الاسم | القيمة |
 |---|---|---|
-| CNAME | `gomla` | `b789e1uc.up.railway.app` |
-| TXT | `_railway-verify.gomla` | القيمة في Railway ← الخدمة ← Settings ← Networking، أو في `F:\Rose-Claude\deploy\logs\gomla-setup.txt` |
+| CNAME (Hostinger بيحوّله لـ ALIAS لوحده) | `@` | `zqb0tnf6.up.railway.app` |
+| TXT | `_railway-verify` | `railway-verify=12dba45714c303d41072a37501e3d2a1480e93a8497df4ef9525a737c7ae04f4` |
 
-لو الدومين على Cloudflare، سطر الـ CNAME لازم يبقى **DNS only** (السحابة رمادي).
+- قبل ما تضيفي السجلين، امسحي أي سجل **A** أو **AAAA** أو **CNAME** قديم على `@`، وكمان أي ALIAS بتاع CDN بتاع Hostinger.
+- **خطة التجربة في Railway** بتسمح بدومين واحد بس لكل خدمة. علشان كده اتشال `gomla.sheout-eg.com`، و`www.gomltha.com` محتاج ترقية الأول.
+- بعد الترقية تقدري تضيفي `www.gomltha.com` من Railway ← rose-wholesale ← Settings ← Networking ← Custom Domain، وتحطي سجل CNAME `www` بالقيمة اللي Railway هيديهالك.
 
 ### النشر والتحديث
 1. اشتغلي على فرع جديد، والاختبارات لازم تنجح.
@@ -160,8 +162,7 @@
 
 ### حاجات لازم تتعمل
 - **Railway لسه في فترة التجربة.** لما الرصيد يخلص، الجملة والمتجر الاتنين هيقفوا. محتاج ترقية لخطة Hobby أو أعلى.
-- **سجلات DNS** لدومين gomla.
-- **نقل داتا الجملة القديمة** من خدمة المتجر، بنسخة احتياطية وموافقة. التجار القدام هيحتاجوا كلمة سر مؤقتة.
+- **سجلات DNS** لدومين gomltha.com في Hostinger.
 - **`railway.toml`** محتاج يتنقل بـ `railway config migrate` قبل 2026-12-01.
 
 ### المشروع التاني
@@ -178,4 +179,6 @@
 
 ## سكربتات جهاز النشر (ويندوز)
 
-`deploy/windows/ROSE_GOMLA_SETUP.cmd`: بيعمل خدمة Railway للجملة (volume ومتغيرات ودومين gomla.sheout-eg.com). بيتشغل من `F:\Rose-Claude\deploy` وبيكتب النتيجة في `logs\gomla-setup.txt`. كلمة سر المالك بتتحفظ على الجهاز بس في `F:\Rose-Claude\secrets` ومش بتترفع على GitHub.
+`deploy/windows/ROSE_GOMLA_SETUP.cmd`: بيعمل خدمة Railway للجملة (متغيرات ودومين gomltha.com؛ الـ Volume بيتعمل من لوحة Railway). بيتشغل من `F:\Rose-Claude\deploy` وبيكتب النتيجة في `logs\gomla-setup.txt`. كلمة سر المالك بتتحفظ على الجهاز بس في `F:\Rose-Claude\secrets` ومش بتترفع على GitHub.
+
+`deploy/windows/ROSE_GOMLTHA_DOMAIN.cmd`: بيضيف gomltha.com و www.gomltha.com لخدمة الجملة بس، وبيكتب سجلات DNS في `logs\gomltha-domain.txt`.

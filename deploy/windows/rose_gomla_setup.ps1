@@ -8,7 +8,7 @@ $secretDir = Join-Path $root "secrets"
 $status = Join-Path $logDir "gomla-setup.txt"
 $pwFile = Join-Path $secretDir "gomla-owner-password.txt"
 $svc = "rose-wholesale"
-$domain = "gomla.sheout-eg.com"
+$domain = "gomltha.com"
 New-Item -ItemType Directory -Force -Path $work, $logDir, $secretDir | Out-Null
 Set-Content -Path $status -Value ("START " + (Get-Date -Format s)) -Encoding UTF8
 function Say($text) { Write-Host $text; Add-Content -Path $status -Value $text -Encoding UTF8 }
