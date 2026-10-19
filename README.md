@@ -103,7 +103,7 @@
 | المشروع والبيئة | `yaseer-loyalty-trial` ← `production` (نفس مشروع المتجر، بس خدمة منفصلة) |
 | الخدمة | `rose-wholesale`، وبتنشر لوحدها من فرع `main` في الريبو ده |
 | الرابط | <https://rose-wholesale-production.up.railway.app> |
-| الدومين | `gomltha.com` (متسجل في Hostinger، والسجلات تحت) |
+| الدومين | <https://gomltha.com> (متسجل في Hostinger، وشغال بالـ https من 19/10) |
 | مكان التخزين | Volume اسمه `rose-wholesale-volume` على `/data`، **منفصل عن داتا المتجر** |
 | البناء | من `Dockerfile`، والفحص على `/api/health` (موجود في `railway.toml`) |
 
@@ -162,7 +162,6 @@
 
 ### حاجات لازم تتعمل
 - **Railway لسه في فترة التجربة.** لما الرصيد يخلص، الجملة والمتجر الاتنين هيقفوا. محتاج ترقية لخطة Hobby أو أعلى.
-- **سجلات DNS** لدومين gomltha.com في Hostinger.
 - **`railway.toml`** محتاج يتنقل بـ `railway config migrate` قبل 2026-12-01.
 
 ### المشروع التاني
