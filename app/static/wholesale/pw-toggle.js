@@ -8,8 +8,9 @@
   // Edge draws its own reveal icon; hide it so there is only one.
   style.textContent = 'input::-ms-reveal,input::-ms-clear{display:none}'
     + '.pw-wrap{position:relative}'
-    + '.pw-eye{position:absolute;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;margin:0;border:0;background:transparent;color:inherit;opacity:.6;cursor:pointer;border-radius:8px}'
-    + '.pw-eye:hover,.pw-eye:focus-visible{opacity:1}';
+    // Pages style every <button> (height, colour, shadow); reset all of that for the small eye.
+    + '.pw-wrap .pw-eye{position:absolute;left:2px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:40px;height:40px;min-width:0;min-height:0;padding:0;margin:0;border:0;background:transparent;box-shadow:none;color:#6e6e73;opacity:.8;cursor:pointer;border-radius:8px}'
+    + '.pw-wrap .pw-eye:hover,.pw-wrap .pw-eye:focus-visible{opacity:1;background:transparent}';
   document.head.appendChild(style);
 
   function enhance(input) {
@@ -18,18 +19,23 @@
     const focused = document.activeElement === input;
     const wrap = document.createElement('span');
     wrap.className = 'pw-wrap';
-    wrap.style.display = getComputedStyle(input).display === 'block' ? 'block' : 'inline-block';
+    // A field given a fixed width keeps it; every other field fills its row as before.
+    if (input.style.width) {
+      wrap.style.display = 'inline-block';
+      wrap.style.width = input.style.width;
+    } else {
+      wrap.style.display = 'block';
+    }
+    input.style.width = '100%';
     input.parentNode.insertBefore(wrap, input);
     wrap.appendChild(input);
 
-    // The button sits on the side where the typed text ends, so it never covers the first characters.
-    const side = getComputedStyle(input).direction === 'rtl' ? 'left' : 'right';
+    // All pages are right-to-left, so the eye sits at the left end of the field on every screen.
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'pw-eye';
-    btn.style[side] = '2px';
-    input.style['padding' + (side === 'left' ? 'Left' : 'Right')] = '42px';
-    if (getComputedStyle(input).textAlign === 'center') input.style.paddingLeft = input.style.paddingRight = '42px';
+    input.style.paddingLeft = '42px';
+    if (getComputedStyle(input).textAlign === 'center') input.style.paddingRight = '42px';
     const sync = () => {
       const shown = input.type === 'text';
       btn.innerHTML = shown ? EYE_OFF : EYE;
