@@ -194,15 +194,30 @@
     document.getElementById('l-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
   }
 
+  async function logout() {
+    await fetch('/api/wholesale/auth/logout', { method: 'POST', credentials: 'same-origin' });
+    state.me = null;
+    location.hash = '#catalog';
+    route();
+  }
+
+  // Before approval the trader only sees these gate screens, so each one needs its own way out.
+  const gateLogout = '<button class="btn ghost block" id="gate-logout">خروج (أو الدخول بحساب تاني)</button>';
+  function bindGateLogout() {
+    document.getElementById('gate-logout').onclick = (e) => run(e.target, logout);
+  }
+
   function renderGate() {
     const s = state.me.trader_status;
     if (s === 'pending') {
-      view.innerHTML = `<div class="gate card stack"><h2>طلبك بيتراجع</h2><p class="muted" style="margin:0">استلمنا طلب انضمامك للجملة باسم «${esc(state.me.shop_name)}». أول ما يتقبل هتقدر تشوف الأسعار وتطلب.</p><button class="btn" id="refresh">تحديث</button></div>`;
+      view.innerHTML = `<div class="gate card stack"><h2>طلبك بيتراجع</h2><p class="muted" style="margin:0">استلمنا طلب انضمامك للجملة باسم «${esc(state.me.shop_name)}». أول ما يتقبل هتقدر تشوف الأسعار وتطلب.</p><button class="btn" id="refresh">تحديث</button>${gateLogout}</div>`;
       document.getElementById('refresh').onclick = () => { state.me = null; route(); };
+      bindGateLogout();
       return;
     }
     if (s === 'suspended') {
-      view.innerHTML = '<div class="gate card stack"><h2>حسابك في الجملة واقف مؤقتًا</h2><p class="muted" style="margin:0">كلّمنا علشان نرجّعه.</p></div>';
+      view.innerHTML = `<div class="gate card stack"><h2>حسابك في الجملة واقف مؤقتًا</h2><p class="muted" style="margin:0">كلّمنا علشان نرجّعه.</p>${gateLogout}</div>`;
+      bindGateLogout();
       return;
     }
     view.innerHTML = `
@@ -214,7 +229,9 @@
         <label class="field">العنوان بالتفصيل (للتوصيل)<input type="text" id="j-address" maxlength="300" placeholder="الشارع، علامة مميزة"></label>
         <label class="field">ملاحظة (اختياري)<textarea id="j-note" maxlength="400" placeholder="مثلًا: نوع البضاعة اللي بتشتغل فيها"></textarea></label>
         <button class="btn primary block" id="j-go">ابعت طلب الانضمام</button>
+        ${gateLogout}
       </div>`;
+    bindGateLogout();
     document.getElementById('j-go').onclick = (e) => run(e.target, async () => {
       await api('POST', '/api/wholesale/join', { shop_name: document.getElementById('j-shop').value.trim(), area: document.getElementById('j-area').value.trim(), address: document.getElementById('j-address').value.trim(), note: document.getElementById('j-note').value.trim() });
       state.me = null;
@@ -1218,12 +1235,7 @@
       toast('كلمة السر اتغيّرت');
       renderAccount();
     });
-    document.getElementById('logout').onclick = (e) => run(e.target, async () => {
-      await fetch('/api/wholesale/auth/logout', { method: 'POST', credentials: 'same-origin' });
-      state.me = null;
-      location.hash = '#catalog';
-      route();
-    });
+    document.getElementById('logout').onclick = (e) => run(e.target, logout);
     const send = document.getElementById('c-send');
     if (send) send.onclick = () => run(send, async () => {
       const image = await readImage(document.getElementById('c-proof').files[0]);
