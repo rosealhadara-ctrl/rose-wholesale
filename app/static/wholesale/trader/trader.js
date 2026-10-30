@@ -114,6 +114,7 @@
     document.getElementById('bottom-nav').hidden = !approved;
     document.getElementById('top-cart').hidden = !approved;
     document.getElementById('search-row').hidden = !approved;
+    drawCatBar(approved);
     const n = state.me.unread || 0;
     const badge = document.getElementById('notif-count');
     badge.hidden = !n;
@@ -138,6 +139,7 @@
     const r = currentRoute();
     document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('on', a.dataset.nav === r.name || (r.name === 'order' && a.dataset.nav === 'orders')));
     drawCartBar();
+    view.classList.remove('wide');
     if (!state.me.logged_in) return renderLogin();
     if (state.me.trader_status !== 'approved') return renderGate();
     if (state.offline && r.name !== 'shortages') return renderOffline();
@@ -194,15 +196,30 @@
     document.getElementById('l-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
   }
 
+  async function logout() {
+    await fetch('/api/wholesale/auth/logout', { method: 'POST', credentials: 'same-origin' });
+    state.me = null;
+    location.hash = '#catalog';
+    route();
+  }
+
+  // Before approval the trader only sees these gate screens, so each one needs its own way out.
+  const gateLogout = '<button class="btn ghost block" id="gate-logout">خروج (أو الدخول بحساب تاني)</button>';
+  function bindGateLogout() {
+    document.getElementById('gate-logout').onclick = (e) => run(e.target, logout);
+  }
+
   function renderGate() {
     const s = state.me.trader_status;
     if (s === 'pending') {
-      view.innerHTML = `<div class="gate card stack"><h2>طلبك بيتراجع</h2><p class="muted" style="margin:0">استلمنا طلب انضمامك للجملة باسم «${esc(state.me.shop_name)}». أول ما يتقبل هتقدر تشوف الأسعار وتطلب.</p><button class="btn" id="refresh">تحديث</button></div>`;
+      view.innerHTML = `<div class="gate card stack"><h2>طلبك بيتراجع</h2><p class="muted" style="margin:0">استلمنا طلب انضمامك للجملة باسم «${esc(state.me.shop_name)}». أول ما يتقبل هتقدر تشوف الأسعار وتطلب.</p><button class="btn" id="refresh">تحديث</button>${gateLogout}</div>`;
       document.getElementById('refresh').onclick = () => { state.me = null; route(); };
+      bindGateLogout();
       return;
     }
     if (s === 'suspended') {
-      view.innerHTML = '<div class="gate card stack"><h2>حسابك في الجملة واقف مؤقتًا</h2><p class="muted" style="margin:0">كلّمنا علشان نرجّعه.</p></div>';
+      view.innerHTML = `<div class="gate card stack"><h2>حسابك في الجملة واقف مؤقتًا</h2><p class="muted" style="margin:0">كلّمنا علشان نرجّعه.</p>${gateLogout}</div>`;
+      bindGateLogout();
       return;
     }
     view.innerHTML = `
@@ -214,7 +231,9 @@
         <label class="field">العنوان بالتفصيل (للتوصيل)<input type="text" id="j-address" maxlength="300" placeholder="الشارع، علامة مميزة"></label>
         <label class="field">ملاحظة (اختياري)<textarea id="j-note" maxlength="400" placeholder="مثلًا: نوع البضاعة اللي بتشتغل فيها"></textarea></label>
         <button class="btn primary block" id="j-go">ابعت طلب الانضمام</button>
+        ${gateLogout}
       </div>`;
+    bindGateLogout();
     document.getElementById('j-go').onclick = (e) => run(e.target, async () => {
       await api('POST', '/api/wholesale/join', { shop_name: document.getElementById('j-shop').value.trim(), area: document.getElementById('j-area').value.trim(), address: document.getElementById('j-address').value.trim(), note: document.getElementById('j-note').value.trim() });
       state.me = null;
@@ -235,26 +254,64 @@
       else if (q) location.hash = '#catalog';
     }, 300);
   });
+  document.getElementById('search-row').addEventListener('submit', (e) => {
+    e.preventDefault();
+    clearTimeout(searchTimer);
+    const input = document.getElementById('search');
+    input.blur();
+    state.q = input.value.trim();
+    state.page = 1;
+    if (currentRoute().name === 'catalog') loadCatalog();
+    else location.hash = '#catalog';
+  });
+
+  // Amazon-style department strip under the header; shown on every page.
+  function drawCatBar(approved) {
+    const bar = document.getElementById('cat-bar');
+    const sections = (state.me && state.me.sections) || [];
+    bar.hidden = !approved || sections.length < 2;
+    if (bar.hidden) return;
+    bar.innerHTML = `<div class="cat-inner"><button data-s="" aria-pressed="${!state.section}">الكل</button>${sections.map((s) => `<button data-s="${s.id}" aria-pressed="${String(state.section) === String(s.id)}">${esc(s.name)}</button>`).join('')}</div>`;
+    bar.querySelectorAll('button').forEach((b) => (b.onclick = () => {
+      state.section = b.dataset.s; state.page = 1;
+      bar.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      if (currentRoute().name === 'catalog') loadCatalog();
+      else location.hash = '#catalog';
+    }));
+  }
 
   function renderCatalog() {
     const me = state.me;
     const ann = me.announcement;
+    view.classList.add('wide');
     view.innerHTML = `
       ${plusStrip(me)}
       ${ann ? `<section class="promo"><b>${esc(ann.title)}</b><p>${esc(ann.text)}</p>${ann.request_pending ? '<span class="sent">طلبك وصل، والإدارة بتراجعه.</span>' : '<button class="btn sm" id="sub-req">اطلب الاشتراك</button>'}</section>` : ''}
-      ${me.sections && me.sections.length > 1 ? `<div class="chips" id="sections">
-        <button class="chip" data-s="" aria-pressed="${!state.section}">الكل</button>
-        ${me.sections.map((s) => `<button class="chip" data-s="${s.id}" aria-pressed="${String(state.section) === String(s.id)}">${esc(s.name)}</button>`).join('')}
-      </div>` : ''}
+      <div id="hero"></div>
+      <div id="results-bar"></div>
       <div id="products"><p class="empty">بيحمّل…</p></div>`;
     const sub = document.getElementById('sub-req');
     if (sub) sub.onclick = () => run(sub, async () => { await api('POST', '/api/wholesale/subscription-request', {}); toast('طلب الاشتراك وصل'); state.me = null; route(); });
-    view.querySelectorAll('#sections .chip').forEach((b) => (b.onclick = () => {
-      state.section = b.dataset.s; state.page = 1;
-      view.querySelectorAll('#sections .chip').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
-      loadCatalog();
-    }));
     loadCatalog();
+  }
+
+  // Welcome banner on the plain first page only; searches and departments go straight to results.
+  function drawHero() {
+    const box = document.getElementById('hero');
+    if (!box) return;
+    const home = !state.q && !state.section && state.page === 1 && !state.me.announcement;
+    box.innerHTML = home ? `<section class="hero"><span class="hero-kicker">أسعار جملة لمحلك</span><b>أهلًا ${esc(state.me.shop_name || state.me.name || '')}</b><p>اطلب بالقطعة أو الدستة أو الكرتونة، وكل ما تكبّر الوحدة توفّر أكتر.</p></section>` : '';
+  }
+
+  function drawResultsBar(data) {
+    const box = document.getElementById('results-bar');
+    if (!box) return;
+    const section = (state.me.sections || []).find((s) => String(s.id) === String(state.section));
+    const title = state.q ? `نتايج «${esc(state.q)}»` : section ? esc(section.name) : 'كل الأصناف';
+    const range = `${int(data.total)} صنف${data.pages > 1 ? ` · صفحة ${int(data.page)} من ${int(data.pages)}` : ''}`;
+    box.innerHTML = data.total ? `<div class="results-bar"><h2>${title}</h2><span class="muted small">${range}</span>${state.q ? '<button class="btn ghost sm" id="clear-q">امسح البحث</button>' : ''}</div>` : '';
+    const clear = document.getElementById('clear-q');
+    if (clear) clear.onclick = () => { state.q = ''; state.page = 1; document.getElementById('search').value = ''; loadCatalog(); };
   }
 
   async function loadCatalog() {
@@ -268,6 +325,8 @@
     try { data = await api('GET', '/api/wholesale/catalog?' + params); } catch (e) { box.innerHTML = `<div class="alert bad">${esc(e.message)}</div>`; return; }
     if (stale(seq) || !box.isConnected) return;
     state.catalog = data;
+    drawHero();
+    drawResultsBar(data);
     if (!data.items.length) {
       box.innerHTML = state.q
         ? `<div class="empty"><b>مفيش «${esc(state.q)}» عندنا دلوقتي</b>سجّله طلب توفير، وهنبلغك لو وفّرناه.<br><br><button class="btn primary" id="to-request">سجّله طلب توفير</button></div>`
@@ -293,7 +352,14 @@
     const extra = unit !== 'piece' && info.per_piece != null
       ? `<span class="per">القطعة جوه ال${UNIT[unit]} بـ ${money(info.per_piece)}${info.pieces ? ` · ${int(info.pieces)} قطعة` : ''}</span>`
       : '';
-    return `<div class="price-line"><span class="price num">${fmt(info.price)} <small>ج / ${UNIT[unit]}</small></span>${info.saving_percent ? `<span class="save">وفّر ${int(info.saving_percent)}٪</span>` : ''}</div>${extra}`;
+    return `<div class="price-line"><span class="price num">${priceParts(info.price)} <small>ج / ${UNIT[unit]}</small></span>${info.saving_percent ? `<span class="save">وفّر ${int(info.saving_percent)}٪</span>` : ''}</div>${extra}`;
+  }
+
+  // Big pounds, small piasters, like a shop price tag.
+  function priceParts(v) {
+    const n = Math.round(Number(v || 0) * 100);
+    const piasters = String(n % 100).padStart(2, '0');
+    return `<span class="pounds">${int(Math.floor(n / 100))}</span>${piasters !== '00' ? `<sup>.${piasters}</sup>` : ''}`;
   }
 
   function productCard(p) {
@@ -302,15 +368,17 @@
     const inCart = cart.filter((l) => l.product_id === p.id).map((l) => `${int(l.qty)} ${UNIT[l.unit]}`).join(' + ');
     return `
       <article class="product" data-id="${p.id}">
-        <div class="p-head">
-          ${p.image_url ? `<img class="p-img" src="${esc(p.image_url)}" alt="" loading="lazy">` : `<span class="p-img">${esc(p.name.trim().charAt(0))}</span>`}
-          <div><div class="p-name">${esc(p.name)}</div>${p.section_name ? `<div class="p-section">${esc(p.section_name)}</div>` : ''}${inCart ? `<div class="in-cart">في السلة: ${inCart}</div>` : ''}</div>
-        </div>
-        ${available.length > 1 ? `<div class="seg" role="group" aria-label="الوحدة">${available.map(([u, l]) => `<button data-u="${u}" aria-pressed="${u === unit}">${l}</button>`).join('')}</div>` : ''}
-        <div class="p-price">${priceBlock(p, unit)}</div>
-        <div class="add-row">
-          <div class="stepper"><button data-step="1" aria-label="زوّد">+</button><input type="number" inputmode="numeric" min="1" max="9999" value="1" aria-label="الكمية"><button data-step="-1" aria-label="قلّل">−</button></div>
-          <button class="btn primary" data-add style="flex:1">أضف للسلة</button>
+        <div class="p-media">${p.image_url ? `<img src="${esc(p.image_url)}" alt="" loading="lazy">` : `<span class="p-letter">${esc(p.name.trim().charAt(0))}</span>`}</div>
+        <div class="p-body">
+          <h3 class="p-name">${esc(p.name)}</h3>
+          ${p.section_name ? `<div class="p-section">${esc(p.section_name)}</div>` : ''}
+          ${available.length > 1 ? `<div class="seg" role="group" aria-label="الوحدة">${available.map(([u, l]) => `<button data-u="${u}" aria-pressed="${u === unit}">${l}</button>`).join('')}</div>` : ''}
+          <div class="p-price">${priceBlock(p, unit)}</div>
+          ${inCart ? `<div class="in-cart">في السلة: ${inCart}</div>` : ''}
+          <div class="add-row">
+            <div class="stepper"><button data-step="1" aria-label="زوّد">+</button><input type="number" inputmode="numeric" min="1" max="9999" value="1" aria-label="الكمية"><button data-step="-1" aria-label="قلّل">−</button></div>
+            <button class="btn add-btn" data-add>أضف للسلة</button>
+          </div>
         </div>
       </article>`;
   }
@@ -1218,12 +1286,7 @@
       toast('كلمة السر اتغيّرت');
       renderAccount();
     });
-    document.getElementById('logout').onclick = (e) => run(e.target, async () => {
-      await fetch('/api/wholesale/auth/logout', { method: 'POST', credentials: 'same-origin' });
-      state.me = null;
-      location.hash = '#catalog';
-      route();
-    });
+    document.getElementById('logout').onclick = (e) => run(e.target, logout);
     const send = document.getElementById('c-send');
     if (send) send.onclick = () => run(send, async () => {
       const image = await readImage(document.getElementById('c-proof').files[0]);
