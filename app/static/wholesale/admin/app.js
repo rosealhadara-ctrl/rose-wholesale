@@ -874,7 +874,7 @@
     const w = window.open('', '_blank');
     if (!w) { toast('المتصفح منع فتح نافذة الطباعة', true); return; }
     w.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>طلب شراء ${esc(po.number)}</title>
-      <style>body{font-family:Tahoma,Arial,sans-serif;padding:24px;color:#222}h1{font-size:20px;margin:0 0 4px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #ccc;padding:8px;text-align:right;font-size:14px}th{background:#f4eeee}.muted{color:#666;font-size:13px}</style></head><body>
+      <style>body{font-family:Tahoma,Arial,sans-serif;padding:24px;color:#222}h1{font-size:20px;margin:0 0 4px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #ccc;padding:8px;text-align:right;font-size:14px}th{background:#eef1f5}.muted{color:#666;font-size:13px}</style></head><body>
       <h1>طلب شراء ${esc(po.number)}</h1><div class="muted">روز · ${dateText(d.created_at)}</div>
       <table><thead><tr><th>#</th><th>الصنف</th><th>الكود</th><th>الكمية</th><th>الوحدة</th><th>ملاحظة</th><th>متوفر؟</th></tr></thead><tbody>
       ${po.items.map((i, n) => `<tr><td>${n + 1}</td><td>${esc(i.supplier_item_name || i.name)}</td><td>${esc(i.supplier_code)}</td><td>${i.qty}</td><td>${UNIT_NAME[i.unit]}</td><td>${esc(i.note)}</td><td></td></tr>`).join('')}
@@ -1760,12 +1760,12 @@
       <div class="ws-section-head"><div><h2>التقييمات</h2><p>تقييم عام لتجربة التاجر بعد ما يستلم، وبيوصلك إنت بس.</p></div></div>
       <div class="grid-2">
         <section class="card stack"><div class="row"><b style="font-size:40px" class="num">${d.average == null ? '—' : d.average}</b><span class="muted">من 5 · ${d.count} تقييم</span></div>
-          ${[5, 4, 3, 2, 1].map((n) => `<div class="row" style="gap:8px"><span class="num" style="width:16px">${n}</span><div style="flex:1;background:#EFE9E7;border-radius:6px;height:12px"><div style="width:${(d.distribution[n] / max) * 100}%;background:#C98A2E;height:12px;border-radius:6px"></div></div><span class="num small" style="width:28px">${d.distribution[n]}</span></div>`).join('')}
+          ${[5, 4, 3, 2, 1].map((n) => `<div class="row" style="gap:8px"><span class="num" style="width:16px">${n}</span><div style="flex:1;background:#ECEEF2;border-radius:6px;height:12px"><div style="width:${(d.distribution[n] / max) * 100}%;background:#C98A2E;height:12px;border-radius:6px"></div></div><span class="num small" style="width:28px">${d.distribution[n]}</span></div>`).join('')}
         </section>
         <section class="card"><h3 style="margin-bottom:8px">اللي عجب التجار</h3>${d.liked.length ? d.liked.map(([k, n]) => `<div class="row" style="padding:4px 0;border-bottom:1px solid var(--line)"><span style="flex:1">${esc(k)}</span><b class="num">${n}</b></div>`).join('') : '<p class="muted">لسه مفيش.</p>'}</section>
       </div>
       <section class="card" style="margin-top:16px">${d.items.length ? `<div class="table-wrap"><table><thead><tr><th>التاجر</th><th>الطلب</th><th>التقييم</th><th>عجبه</th><th>عايزنا نحسّن</th><th>الوقت</th></tr></thead><tbody>
-        ${d.items.map((r) => `<tr><td>${esc(r.shop_name || r.name)}</td><td class="num">${r.order_number}</td><td style="color:#C98A2E;white-space:nowrap">${'★'.repeat(r.stars)}<span style="color:#D9CDCA">${'★'.repeat(5 - r.stars)}</span></td><td class="small">${r.liked.map(esc).join('، ')}</td><td class="small">${esc(r.improve)}</td><td class="small">${dateText(r.created_at)}</td></tr>`).join('')}
+        ${d.items.map((r) => `<tr><td>${esc(r.shop_name || r.name)}</td><td class="num">${r.order_number}</td><td style="color:#C98A2E;white-space:nowrap">${'★'.repeat(r.stars)}<span style="color:#CDD3DD">${'★'.repeat(5 - r.stars)}</span></td><td class="small">${r.liked.map(esc).join('، ')}</td><td class="small">${esc(r.improve)}</td><td class="small">${dateText(r.created_at)}</td></tr>`).join('')}
       </tbody></table></div>` : '<p class="muted">لسه مفيش تقييمات.</p>'}</section>`;
   }
 

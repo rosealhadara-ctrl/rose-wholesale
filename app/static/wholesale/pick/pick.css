@@ -1,7 +1,7 @@
 body.pick { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
 .btn.light { color: #fff; border-color: rgba(255,255,255,.3); }
 .top-tabs { max-width: 960px; margin: 10px auto 0; background: rgba(255,255,255,.1); }
-.top-tabs button { color: #F4E6E9; }
+.top-tabs button { color: #DCE3F0; }
 .top-tabs button[aria-pressed="true"] { background: #fff; color: var(--header); }
 
 .stat-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }
@@ -18,12 +18,12 @@ body.pick { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
 .tag { display: inline-flex; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 700; }
 .tag.note { background: var(--pink-soft); color: var(--accent-dark); }
 .tag.prio { background: var(--amber-bg); color: var(--amber); }
-.tag.lock { background: #EFE9E7; color: var(--muted); }
+.tag.lock { background: #ECEEF2; color: var(--muted); }
 .tag.me { background: var(--green-bg); color: var(--green); }
 
 .timer-bar { position: sticky; top: 0; z-index: 5; background: var(--header); color: #fff; border-radius: 0 0 16px 16px; margin: -14px -16px 12px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
 .timer { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 1px; direction: ltr; }
-.timer-bar .meta { flex: 1; font-size: 13px; color: #F4E6E9; }
+.timer-bar .meta { flex: 1; font-size: 13px; color: #DCE3F0; }
 .timer-bar .meta b { color: #fff; font-size: 16px; display: block; }
 
 .pick-item { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 14px; display: grid; gap: 10px; }
