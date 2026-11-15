@@ -50,6 +50,32 @@ def test_wholesale_admin_flow(tmp_path, monkeypatch):
         tiers = client.post("/api/admin/wholesale/tiers", json={"name": "تاجر كبير", "margin_percent": 8}).json()
         assert any(t["name"] == "تاجر كبير" for t in tiers)
 
-        # Trader-facing routes need a Rose customer session.
-        assert client.get("/api/wholesale/catalog").status_code == 401
-        assert client.get("/api/wholesale/me").json() == {"logged_in": False}
+        client.post("/api/staff/logout")
+        client.cookies.clear()
+
+        # Visitors browse at the default tier's prices and can price a cart, but can't order.
+        me = client.get("/api/wholesale/me").json()
+        assert me["logged_in"] is False and "sections" in me
+        catalog = client.get("/api/wholesale/catalog")
+        assert catalog.status_code == 200, catalog.text
+        juice = next(i for i in catalog.json()["items"] if i["name"] == "عصير")
+        assert set(juice) == {"id", "name", "section_id", "section_name", "image_url", "units"}
+        assert juice["units"]["piece"]["price"] > 0
+        cart = {"items": [{"product_id": juice["id"], "unit": "piece", "qty": 2}]}
+        checked = client.post("/api/wholesale/cart/check", json=cart).json()
+        assert checked["checkout"] is None
+        assert checked["items"][str(juice["id"])]["units"]["piece"]["price"] == juice["units"]["piece"]["price"]
+        assert client.post("/api/wholesale/orders", json=cart).status_code == 401
+        assert client.get("/api/wholesale/orders").status_code == 401
+
+        # A new account waiting for approval browses the same way and still can't order.
+        signup = client.post("/api/wholesale/auth/signup", json={
+            "name": "تاجر جديد", "phone": "01011112222", "password": "Trader-pass-1",
+            "shop_name": "محل تجربة", "area": "المعادي", "address": "",
+        })
+        assert signup.status_code == 200, signup.text
+        me = client.get("/api/wholesale/me").json()
+        assert me["trader_status"] == "pending" and "sections" in me
+        assert client.get("/api/wholesale/catalog").status_code == 200
+        assert client.post("/api/wholesale/cart/check", json=cart).json()["checkout"] is None
+        assert client.post("/api/wholesale/orders", json=cart).status_code == 403

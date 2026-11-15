@@ -72,6 +72,22 @@ def test_catalog_hides_supplier_data(conn, shop):
     assert wo.catalog(conn, c, q="زيت")["total"] == 1
 
 
+def test_home_sections_for_visitors(conn, shop):
+    drinks = ws.section_id_for(conn, "مشروبات")
+    conn.execute("UPDATE ws_products SET section_id = ? WHERE id IN (?, ?)", (drinks, shop["p"]["A1"], shop["p"]["B1"]))
+    rows = wo.home_sections(conn, None)
+    assert [s["name"] for s in rows] == ["مشروبات"]
+    names = {i["name"] for s in rows for i in s["items"]}
+    assert "عصير" in names
+    for s in rows:
+        assert s["items"] and len(s["items"]) <= 4
+        for item in s["items"]:
+            assert set(item) == {"id", "name", "image_url", "unit", "price"} and item["price"] > 0
+    juice = next(i for s in rows for i in s["items"] if i["name"] == "عصير")
+    listed = next(i for i in wo.catalog(conn, None)["items"] if i["name"] == "عصير")
+    assert juice["price"] == listed["units"][juice["unit"]]["price"]
+
+
 def test_full_order_flow(conn, shop):
     c, p = shop["c1"], shop["p"]
     wo.decide_trader(conn, c, "approved", None, None)

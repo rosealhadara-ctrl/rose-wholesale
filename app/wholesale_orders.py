@@ -24,6 +24,7 @@ from .db import utc_now
 from .wholesale_pricing import (
     UNIT_LABELS,
     UNITS,
+    default_tier,
     get_settings,
     load_offers,
     load_tier_prices,
@@ -201,13 +202,14 @@ def decide_trader(conn: sqlite3.Connection, customer_id: int, status: str, tier_
 # --------------------------------------------------------------------- catalog
 
 
-def catalog(conn: sqlite3.Connection, customer_id: int, q: str = "", section_id: Optional[int] = None,
+def catalog(conn: sqlite3.Connection, customer_id: Optional[int], q: str = "", section_id: Optional[int] = None,
             page: int = 1, per_page: int = 40, ids: Optional[List[int]] = None) -> Dict[str, Any]:
     """Products the trader can order, priced for their tier only.
 
+    customer_id None means a visitor browsing before approval: they see the default tier's prices.
     No supplier, cost or tier information leaves this function.
     """
-    tier = tier_for_customer(conn, customer_id)
+    tier = tier_for_customer(conn, customer_id) if customer_id else default_tier(conn)
     settings = get_settings(conn)
     where = [
         "p.is_visible = 1",
@@ -265,6 +267,26 @@ def catalog(conn: sqlite3.Connection, customer_id: int, q: str = "", section_id:
             "units": units,
         })
     return {"items": items, "total": total, "page": page, "pages": pages}
+
+
+def home_sections(conn: sqlite3.Connection, customer_id: Optional[int], limit: int = 12, per_section: int = 4) -> List[Dict[str, Any]]:
+    """The storefront: each section with a few of its products, pictures first.
+
+    Same prices and same hidden fields as catalog(); each sample carries its first sold unit's price.
+    """
+    out = []
+    for section in trader_sections(conn)[:limit]:
+        items = catalog(conn, customer_id, section_id=section["id"], per_page=12)["items"]
+        if not items:
+            continue
+        items.sort(key=lambda i: not i["image_url"])
+        samples = []
+        for item in items[:per_section]:
+            unit = next(u for u in UNITS if item["units"][u])
+            samples.append({"id": item["id"], "name": item["name"], "image_url": item["image_url"],
+                            "unit": unit, "price": item["units"][unit]["price"]})
+        out.append({"id": section["id"], "name": section["name"], "products": section["products"], "items": samples})
+    return out
 
 
 def trader_sections(conn: sqlite3.Connection) -> List[Dict[str, Any]]:

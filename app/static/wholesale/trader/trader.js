@@ -75,8 +75,7 @@
   const cartCount = () => cart.reduce((s, l) => s + l.qty, 0);
   const cartTotal = () => cart.reduce((s, l) => s + l.qty * l.price, 0);
   function drawCartBar() {
-    const approved = state.me && state.me.trader_status === 'approved';
-    const show = approved && cart.length && !['cart', 'done'].includes(currentRoute().name);
+    const show = state.me && cart.length && !['cart', 'done', 'login', 'signup'].includes(currentRoute().name);
     document.getElementById('cart-bar').hidden = !show;
     document.getElementById('cart-bar-text').textContent = `${int(cart.length)} صنف · ${money(cartTotal())}`;
     const dot = document.getElementById('top-cart-count');
@@ -111,10 +110,18 @@
     const approved = state.me.trader_status === 'approved';
     if (state.me.must_change_password) sessionStorage.setItem('ws-change-password', '1');
     document.getElementById('shop-name').textContent = state.me.shop_name || state.me.name || '';
+    // Anyone can browse and fill the cart (Amazon style); the bottom nav is for approved traders only.
     document.getElementById('bottom-nav').hidden = !approved;
-    document.getElementById('top-cart').hidden = !approved;
-    document.getElementById('search-row').hidden = !approved;
-    drawCatBar(approved);
+    document.getElementById('top-cart').hidden = false;
+    document.getElementById('search-row').hidden = false;
+    const acct = document.getElementById('top-account');
+    acct.hidden = false;
+    acct.href = state.me.logged_in ? '#account' : '#login';
+    acct.setAttribute('aria-label', state.me.logged_in ? 'حسابي' : 'دخول أو حساب جديد');
+    document.getElementById('top-account-hi').textContent = state.me.logged_in ? `أهلًا ${state.me.name || ''}` : 'أهلًا، سجّل دخولك';
+    document.getElementById('top-account-label').textContent = state.me.logged_in ? 'حسابي' : 'الحساب';
+    state.home = null; // prices follow the account's tier, so reload the storefront rows
+    drawCatBar();
     const n = state.me.unread || 0;
     const badge = document.getElementById('notif-count');
     badge.hidden = !n;
@@ -140,8 +147,13 @@
     document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('on', a.dataset.nav === r.name || (r.name === 'order' && a.dataset.nav === 'orders')));
     drawCartBar();
     view.classList.remove('wide');
-    if (!state.me.logged_in) return renderLogin();
-    if (state.me.trader_status !== 'approved') return renderGate();
+    if (state.me.trader_status !== 'approved') {
+      // Visitors and accounts waiting for approval can browse and fill the cart; ordering needs approval.
+      if (r.name === 'login' || r.name === 'signup') return state.me.logged_in ? renderGate() : renderLogin(r.name);
+      if (r.name === 'cart') return renderCart();
+      if (r.name === 'catalog' || !r.name) return renderCatalog();
+      return state.me.logged_in ? renderGate() : renderLogin();
+    }
     if (state.offline && r.name !== 'shortages') return renderOffline();
     const pages = { catalog: renderCatalog, cart: renderCart, orders: renderOrders, order: renderOrder, shortages: renderShortages, notifications: renderNotifications, account: renderAccount, done: renderDone, plus: renderPlus, nearby: renderNearby, chats: renderChats, chat: renderChat, team: renderTeam, 'team-requests': renderTeamRequests };
     (pages[r.name] || renderCatalog)(r.id);
@@ -153,7 +165,7 @@
     view.innerHTML = signup ? `
       <div class="gate card stack">
         <h2>حساب جديد في روز جملة</h2>
-        <p class="muted" style="margin:0">اكتب بياناتك وبيانات محلك. الإدارة هتراجع الطلب، وأول ما يتقبل هتشوف الأسعار وتطلب.</p>
+        <p class="muted" style="margin:0">اكتب بياناتك وبيانات محلك. الإدارة هتراجع الطلب، وأول ما يتقبل تقدر تبعت طلباتك بأسعار شريحتك.</p>
         <label class="field">اسمك<input type="text" id="s-name" maxlength="80" autocomplete="name"></label>
         <label class="field">رقم الموبايل<input type="tel" id="s-phone" inputmode="tel" autocomplete="tel" dir="ltr" placeholder="01xxxxxxxxx"></label>
         <label class="field">كلمة السر (8 حروف أو أرقام على الأقل)<input type="password" id="s-pass" autocomplete="new-password" dir="ltr" minlength="8"></label>
@@ -161,7 +173,8 @@
         <label class="field">المنطقة<input type="text" id="s-area" maxlength="120"></label>
         <label class="field">العنوان بالتفصيل (للتوصيل)<input type="text" id="s-address" maxlength="300" placeholder="الشارع، علامة مميزة"></label>
         <button class="btn primary block" id="s-go">سجّل وابعت طلب الانضمام</button>
-        <p class="small muted" style="margin:0">عندك حساب؟ <a href="#login" id="to-login">ادخل من هنا</a>.</p>
+        <p class="small muted" style="margin:0">عندك حساب؟ <a href="#login">ادخل من هنا</a>.</p>
+        <a class="btn ghost block" href="#catalog">كمّل تصفّح من غير حساب</a>
       </div>` : `
       <div class="gate card stack">
         <h2>أهلًا بيك في روز جملة</h2>
@@ -171,29 +184,35 @@
         <button class="btn primary block" id="l-go">دخول</button>
         <button class="btn block" id="to-signup">تاجر جديد؟ سجّل حساب</button>
         <p class="small muted" style="margin:0">نسيت كلمة السر؟ كلّمنا، وهنبعتلك كلمة سر مؤقتة.</p>
+        <a class="btn ghost block" href="#catalog">كمّل تصفّح من غير حساب</a>
       </div>`;
     if (signup) {
-      document.getElementById('to-login').onclick = (e) => { e.preventDefault(); renderLogin(); };
       document.getElementById('s-go').onclick = (e) => run(e.target, async () => {
         const v = (id) => document.getElementById(id).value.trim();
         await api('POST', '/api/wholesale/auth/signup', { name: v('s-name'), phone: v('s-phone'), password: document.getElementById('s-pass').value, shop_name: v('s-shop'), area: v('s-area'), address: v('s-address') });
-        state.me = null;
-        route();
+        afterAuth('#account');
       });
       return;
     }
-    document.getElementById('to-signup').onclick = () => renderLogin('signup');
+    document.getElementById('to-signup').onclick = () => { location.hash = '#signup'; };
     const go = () => run(document.getElementById('l-go'), async () => {
       const phone = document.getElementById('l-phone').value.trim();
       const password = document.getElementById('l-pass').value;
       if (!phone || !password) throw new Error('اكتب رقم الموبايل وكلمة السر');
       const res = await api('POST', '/api/wholesale/auth/login', { phone, password });
-      state.me = null;
       if (res.must_change_password) sessionStorage.setItem('ws-change-password', '1');
-      route();
+      afterAuth(cart.length ? '#cart' : '#catalog');
     });
     document.getElementById('l-go').onclick = go;
     document.getElementById('l-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+  }
+
+  // After login or signup from #login/#signup, go where the visitor was heading (the cart stays in the browser).
+  function afterAuth(next) {
+    state.me = null;
+    const r = currentRoute().name;
+    if ((r === 'login' || r === 'signup') && location.hash !== next) location.hash = next;
+    else route();
   }
 
   async function logout() {
@@ -212,7 +231,7 @@
   function renderGate() {
     const s = state.me.trader_status;
     if (s === 'pending') {
-      view.innerHTML = `<div class="gate card stack"><h2>طلبك بيتراجع</h2><p class="muted" style="margin:0">استلمنا طلب انضمامك للجملة باسم «${esc(state.me.shop_name)}». أول ما يتقبل هتقدر تشوف الأسعار وتطلب.</p><button class="btn" id="refresh">تحديث</button>${gateLogout}</div>`;
+      view.innerHTML = `<div class="gate card stack"><h2>طلبك بيتراجع</h2><p class="muted" style="margin:0">استلمنا طلب انضمامك للجملة باسم «${esc(state.me.shop_name)}». لحد ما يتقبل تقدر تتفرج على الأصناف وتجهّز سلتك، وأول ما يتقبل تبعت الطلب.</p><a class="btn primary" href="#catalog">تصفّح الأصناف</a><button class="btn" id="refresh">تحديث</button>${gateLogout}</div>`;
       document.getElementById('refresh').onclick = () => { state.me = null; route(); };
       bindGateLogout();
       return;
@@ -266,10 +285,10 @@
   });
 
   // Amazon-style department strip under the header; shown on every page.
-  function drawCatBar(approved) {
+  function drawCatBar() {
     const bar = document.getElementById('cat-bar');
     const sections = (state.me && state.me.sections) || [];
-    bar.hidden = !approved || sections.length < 2;
+    bar.hidden = sections.length < 2;
     if (bar.hidden) return;
     bar.innerHTML = `<div class="cat-inner"><button data-s="" aria-pressed="${!state.section}">الكل</button>${sections.map((s) => `<button data-s="${s.id}" aria-pressed="${String(state.section) === String(s.id)}">${esc(s.name)}</button>`).join('')}</div>`;
     bar.querySelectorAll('button').forEach((b) => (b.onclick = () => {
@@ -285,8 +304,10 @@
     const ann = me.announcement;
     view.classList.add('wide');
     view.innerHTML = `
+      ${statusNote()}
       ${plusStrip(me)}
       ${ann ? `<section class="promo"><b>${esc(ann.title)}</b><p>${esc(ann.text)}</p>${ann.request_pending ? '<span class="sent">طلبك وصل، والإدارة بتراجعه.</span>' : '<button class="btn sm" id="sub-req">اطلب الاشتراك</button>'}</section>` : ''}
+      <div id="home"></div>
       <div id="hero"></div>
       <div id="results-bar"></div>
       <div id="products"><p class="empty">بيحمّل…</p></div>`;
@@ -295,12 +316,74 @@
     loadCatalog();
   }
 
+  // Logged in but not approved yet: one line on top saying why ordering is closed.
+  function statusNote() {
+    const me = state.me;
+    if (!me.logged_in || me.trader_status === 'approved') return '';
+    const text = {
+      pending: 'طلب انضمامك بيتراجع. تقدر تتفرج وتجهّز سلتك، وأول ما يتقبل تبعت الطلب.',
+      suspended: 'حسابك في الجملة واقف مؤقتًا. كلّمنا علشان نرجّعه.',
+      rejected: 'طلب انضمامك اللي فات ماتقبلش. ابعت طلب جديد من «حسابي».',
+    }[me.trader_status] || 'كمّل بيانات محلك وابعت طلب الانضمام علشان تقدر تطلب.';
+    return `<a class="alert info status-note" href="#account">${esc(text)}</a>`;
+  }
+
+  const isHome = () => !state.q && !state.section && state.page === 1;
+  // Strong colour pairs for the storefront cards; white text sits on the darker first colour.
+  const TINTS = [['#C2410C', '#FB923C'], ['#1D4ED8', '#60A5FA'], ['#047857', '#34D399'], ['#7E22CE', '#C084FC'], ['#BE123C', '#FB7185'], ['#0E7490', '#22D3EE']];
+  const pic = (url, name) => (url ? `<img src="${esc(url)}" alt="" loading="lazy">` : `<span class="p-letter">${esc(String(name || '').trim().charAt(0))}</span>`);
+
+  function openSection(id) {
+    state.section = String(id); state.page = 1; state.q = '';
+    document.getElementById('search').value = '';
+    drawCatBar();
+    if (currentRoute().name === 'catalog') { loadCatalog(); window.scrollTo(0, 0); } else location.hash = '#catalog';
+  }
+
+  // Storefront on the plain first page: big section cards in a sideways row, then four products per section.
+  async function drawHome() {
+    const box = document.getElementById('home');
+    if (!box) return;
+    if (!isHome()) { box.innerHTML = ''; return; }
+    if (!state.home) {
+      try { state.home = (await api('GET', '/api/wholesale/home')).sections; } catch (_) { state.home = []; }
+    }
+    if (!box.isConnected || !isHome()) return;
+    const secs = state.home;
+    if (!secs.length) { box.innerHTML = ''; return; }
+    const cover = (s) => s.items.find((i) => i.image_url) || s.items[0] || {};
+    box.innerHTML = `
+      <section class="rail-wrap" aria-label="الأقسام">
+        <button class="rail-arrow prev" aria-label="اللي قبله">›</button>
+        <div class="rail" id="rail">${secs.map((s, i) => `
+          <button class="rail-card" data-s="${s.id}" style="--c1:${TINTS[i % TINTS.length][0]};--c2:${TINTS[i % TINTS.length][1]}">
+            <b>${esc(s.name)}</b><span class="small">${int(s.products)} صنف</span>
+            <span class="rail-pic">${pic(cover(s).image_url, s.name)}</span>
+          </button>`).join('')}</div>
+        <button class="rail-arrow next" aria-label="اللي بعده">‹</button>
+      </section>
+      <div class="boxes">${secs.slice(0, 8).map((s, i) => `
+        <section class="box" style="--bar:${TINTS[i % TINTS.length][0]}"><h3>${esc(s.name)}</h3>
+          <div class="box-grid">${s.items.map((it) => `
+            <button class="box-item" data-s="${s.id}"><span class="box-img">${pic(it.image_url, it.name)}</span><span class="box-name">${esc(it.name)}</span><span class="box-price num">${money(it.price)} / ${UNIT[it.unit]}</span></button>`).join('')}</div>
+          <button class="box-more" data-s="${s.id}">شوف كل ${esc(s.name)} ‹</button>
+        </section>`).join('')}</div>`;
+    box.querySelectorAll('[data-s]').forEach((b) => (b.onclick = () => openSection(b.dataset.s)));
+    const rail = document.getElementById('rail');
+    const step = () => Math.max(260, rail.clientWidth * 0.8);
+    box.querySelector('.rail-arrow.prev').onclick = () => rail.scrollBy({ left: step(), behavior: 'smooth' });
+    box.querySelector('.rail-arrow.next').onclick = () => rail.scrollBy({ left: -step(), behavior: 'smooth' });
+  }
+
   // Welcome banner on the plain first page only; searches and departments go straight to results.
   function drawHero() {
     const box = document.getElementById('hero');
     if (!box) return;
-    const home = !state.q && !state.section && state.page === 1 && !state.me.announcement;
-    box.innerHTML = home ? `<section class="hero"><span class="hero-kicker">أسعار جملة لمحلك</span><b>أهلًا ${esc(state.me.shop_name || state.me.name || '')}</b><p>اطلب بالقطعة أو الدستة أو الكرتونة، وكل ما تكبّر الوحدة توفّر أكتر.</p></section>` : '';
+    const me = state.me;
+    const home = isHome() && !me.announcement && !(state.home && state.home.length);
+    const hello = me.logged_in ? `أهلًا ${esc(me.shop_name || me.name || '')}` : 'أهلًا بيك في روز جملة';
+    const cta = me.logged_in ? '' : '<div class="hero-cta"><a class="btn primary sm" href="#signup">سجّل حساب تاجر</a><a class="btn sm" href="#login">عندي حساب</a></div>';
+    box.innerHTML = home ? `<section class="hero"><span class="hero-kicker">أسعار جملة لمحلك</span><b>${hello}</b><p>اطلب بالقطعة أو الدستة أو الكرتونة، وكل ما تكبّر الوحدة توفّر أكتر.</p>${cta}</section>` : '';
   }
 
   function drawResultsBar(data) {
@@ -324,11 +407,16 @@
     let data;
     try { data = await api('GET', '/api/wholesale/catalog?' + params); } catch (e) { box.innerHTML = `<div class="alert bad">${esc(e.message)}</div>`; return; }
     if (stale(seq) || !box.isConnected) return;
+    await drawHome();
+    if (stale(seq) || !box.isConnected) return;
     state.catalog = data;
     drawHero();
     drawResultsBar(data);
     if (!data.items.length) {
-      box.innerHTML = state.q
+      const approved = state.me.trader_status === 'approved';
+      box.innerHTML = state.q && !approved
+        ? `<div class="empty"><b>مفيش «${esc(state.q)}» عندنا دلوقتي</b>جرّب اسم تاني أو اختار قسم.</div>`
+        : state.q
         ? `<div class="empty"><b>مفيش «${esc(state.q)}» عندنا دلوقتي</b>سجّله طلب توفير، وهنبلغك لو وفّرناه.<br><br><button class="btn primary" id="to-request">سجّله طلب توفير</button></div>`
         : '<div class="empty"><b>مفيش أصناف هنا لسه</b></div>';
       const tr = document.getElementById('to-request');
@@ -479,7 +567,7 @@
           <input type="text" class="note" maxlength="200" placeholder="ملاحظة للصنف ده (مثلًا: لون معين)" value="${esc(l.note || '')}">
         </div>`).join('')}
       </section>
-      <section class="card stack">
+      ${state.me.trader_status !== 'approved' ? guestCheckout() : `<section class="card stack">
         ${co && co.blocked ? `<div class="alert bad">${esc(co.blocked_reason)} <a href="#account">حسابي</a></div>` : ''}
         ${co && co.below_min ? `<div class="alert warn">أقل قيمة للطلب ${money(co.min_order)}. فاضل ${money(co.min_order - cartTotal())}.</div>` : ''}
         ${co ? methodPicker(co) : ''}
@@ -494,7 +582,7 @@
         ${co && co.plus.offer && co.plus.offer_delivery > 0 ? `<a class="plus-strip" href="#plus"><span class="plus-badge">بلس</span><span>مع روز بلس التوصيل ده (${money(co.plus.offer_delivery)}) يبقى مجاني</span><span class="plus-go">اعرف أكتر</span></a>` : ''}
         <div class="alert info">${chosen && ['instapay', 'wallet'].includes(chosen.code) ? 'هنراجع الطلب الأول، وبعدها تحوّل الإجمالي النهائي وترفع صورة التحويل من صفحة الطلب.' : chosen && chosen.code === 'credit' ? 'المبلغ هيتسجّل على حسابك لما الطلب يتسلّم.' : 'هتدفع كاش لما الطلب يوصلك.'} لو صنف طلع مش متوفر هنشيله ونسجّله في نواقصك.</div>
         <button class="btn primary block" id="submit" ${!co || co.blocked || co.below_min || !state.payMethod ? 'disabled' : ''}>ابعت الطلب</button>
-      </section>` : '<div class="empty"><b>السلة فاضية</b><a class="btn primary" href="#catalog">روح للجملة</a></div>'}`;
+      </section>`}` : '<div class="empty"><b>السلة فاضية</b><a class="btn primary" href="#catalog">روح للجملة</a></div>'}`;
     const clear = document.getElementById('clear');
     if (clear) clear.onclick = () => { if (confirm('تفضّي السلة كلها؟')) { cart = []; saveCart(); drawCart(); } };
     view.querySelectorAll('[name=pay]').forEach((r) => (r.onchange = () => { state.payMethod = r.value; drawCart([], document.getElementById('order-note').value); }));
@@ -533,6 +621,23 @@
         throw e;
       }
     });
+  }
+
+  // Cart footer for visitors and accounts not approved yet: the total, and the way to an account.
+  function guestCheckout() {
+    const me = state.me;
+    const total = `<div class="totals"><div class="grand"><span>الأصناف (${int(cart.length)})</span><span class="num">${money(cartTotal())}</span></div></div>`;
+    if (!me.logged_in) {
+      return `<section class="card stack">${total}
+        <div class="alert info">علشان تبعت الطلب سجّل حساب تاجر أو ادخل بحسابك. السلة هتفضل محفوظة، والتوصيل وطرق الدفع هيظهروا بعد الدخول.</div>
+        <a class="btn primary block" href="#signup">سجّل حساب تاجر</a>
+        <a class="btn block" href="#login">عندي حساب، ادخل</a>
+      </section>`;
+    }
+    const text = me.trader_status === 'pending'
+      ? 'طلب انضمامك لسه بيتراجع. أول ما يتقبل تقدر تبعت الطلب من هنا، والسلة هتفضل محفوظة.'
+      : 'حسابك لسه مش متفعّل في الجملة. شوف حالة حسابك من «حسابي».';
+    return `<section class="card stack">${total}<div class="alert info">${text}</div><a class="btn block" href="#account">حسابي</a></section>`;
   }
 
   function renderDone() {
