@@ -256,6 +256,14 @@ FIELDS: List[Tuple[str, str]] = [
     ("pieces_per_carton", "عدد القطع في الكرتونة"),
 ]
 FIELD_KEYS = [key for key, _ in FIELDS]
+
+# The downloadable example sheet on the upload page. Any supplier sheet works; this one is just the easiest.
+SAMPLE_SHEET: List[List[Any]] = [
+    ["الكود", "اسم الصنف", "القسم", "سعر القطعة", "سعر الدستة", "سعر الكرتونة", "عدد القطع في الكرتونة"],
+    ["A100", "عصير مانجا 250 مل", "مشروبات", 10, 115, 1300, 144],
+    ["A101", "بسكويت شوكولاتة", "حلويات", 5, 55, None, None],
+    ["A102", "زيت عباد الشمس 1 لتر", "زيوت", 65, None, 1500, 24],
+]
 PRICE_FIELDS = ("price_piece", "price_dozen", "price_carton")
 
 _GUESS_RULES: List[Tuple[str, List[str]]] = [
@@ -323,6 +331,8 @@ def _template_header_row(template: Dict[str, Any], rows: List[List[str]]) -> int
         hits = len(wanted & {normalize_name(c) for c in row if c})
         if hits > best_hits:
             best, best_hits = number, hits
+    if wanted and not best_hits:
+        return _detect_header_row(rows)  # none of the saved headers: a new layout, find its header row afresh
     return best
 
 
@@ -336,17 +346,33 @@ def _template(conn: sqlite3.Connection, supplier_id: int) -> Optional[Dict[str, 
 
 
 def _mapping_from_template(template: Dict[str, Any], headers: List[str]) -> Dict[str, Optional[int]]:
-    """Re-locate saved columns by header text first, then by position."""
+    """Re-locate saved columns by header text; guess the rest from their headers.
+
+    A saved column is only reused by position when it was saved without a header. If the supplier
+    changed the layout so that no saved header is left, the sheet is read afresh like a first upload,
+    so a moved price column never lands on the wrong data.
+    """
     mapping: Dict[str, Optional[int]] = {key: None for key in FIELD_KEYS}
     keys = [normalize_name(h) for h in headers]
+    had_headers, hits = False, 0
     for field, saved in (template.get("mapping") or {}).items():
         if field not in mapping or not saved:
             continue
         header_key = normalize_name(saved.get("header", ""))
+        had_headers = had_headers or bool(header_key)
         if header_key and header_key in keys:
             mapping[field] = keys.index(header_key)
-        elif saved.get("index") is not None and saved["index"] < len(headers):
+            hits += 1
+        elif not header_key and saved.get("index") is not None and saved["index"] < len(headers):
             mapping[field] = int(saved["index"])
+    guessed = guess_mapping(headers)
+    if had_headers and not hits:
+        return guessed
+    used = {i for i in mapping.values() if i is not None}
+    for field, index in guessed.items():
+        if mapping[field] is None and index is not None and index not in used:
+            mapping[field] = index
+            used.add(index)
     return mapping
 
 

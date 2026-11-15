@@ -283,6 +283,19 @@ def admin_create_section(payload: SectionIn, request: Request):
 # ---------------------------------------------------------------- admin: import
 
 
+@router.get("/api/admin/wholesale/imports/sample.xlsx")
+def admin_import_sample(request: Request):
+    """Example supplier sheet: the columns the upload understands, with three sample rows."""
+    _admin(request)
+    from .wholesale_xlsx import build_xlsx
+
+    return Response(
+        content=build_xlsx([("أصناف", ws.SAMPLE_SHEET, [0])]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="rose-wholesale-sample.xlsx"', "Cache-Control": "no-store"},
+    )
+
+
 @router.post("/api/admin/wholesale/imports")
 def admin_import_start(payload: ImportStartIn, request: Request):
     user = _admin(request)

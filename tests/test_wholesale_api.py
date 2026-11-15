@@ -47,6 +47,21 @@ def test_wholesale_admin_flow(tmp_path, monkeypatch):
         assert updated.status_code == 200
         assert updated.json()["pricing"][0]["units"]["piece"]["price"] == 12.0
 
+        # The example sheet on the upload page downloads and reads back with every column linked.
+        sample = client.get("/api/admin/wholesale/imports/sample.xlsx")
+        assert sample.status_code == 200 and sample.content[:2] == b"PK"
+        started = client.post(
+            "/api/admin/wholesale/imports",
+            json={"supplier_id": supplier["id"], "filename": "sample.xlsx", "content_base64": base64.b64encode(sample.content).decode()},
+        ).json()
+        assert all(started["mapping"][k] is not None for k in ("name", "code", "section", "price_piece", "price_dozen", "price_carton", "pieces_per_carton"))
+        preview = client.post(
+            f"/api/admin/wholesale/imports/{started['import_id']}/preview",
+            json={"sheet_index": 0, "header_row": started["header_row"], "mapping": started["mapping"]},
+        ).json()
+        assert preview["summary"]["rows"] == 3 and preview["summary"]["problems"] == 0
+        client.post(f"/api/admin/wholesale/imports/{started['import_id']}/cancel")
+
         tiers = client.post("/api/admin/wholesale/tiers", json={"name": "تاجر كبير", "margin_percent": 8}).json()
         assert any(t["name"] == "تاجر كبير" for t in tiers)
 

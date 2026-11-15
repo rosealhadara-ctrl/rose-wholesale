@@ -500,7 +500,18 @@
         <div class="card stack" style="max-width:720px">
           <label class="field"><span>المورد</span><select id="i-supplier">${options(suppliers.map((s) => ({ value: s.id, label: s.alias + (s.has_template ? ' (عنده ربط محفوظ)' : '') })), '', 'اختار المورد')}</select></label>
           <label class="dropzone" id="drop"><b>اسحب الشيت هنا أو دوس لاختياره</b><span class="small muted">xlsx أو csv، لحد 10 ميجا</span><input type="file" id="i-file" accept=".xlsx,.xlsm,.csv" hidden></label>
-        </div>` : '<div class="card empty">لازم تضيف مورد الأول. <button class="btn primary" id="to-suppliers">إضافة مورد</button></div>'}
+        </div>
+        <details class="card stack" style="max-width:720px;margin-top:12px" open>
+          <summary><b>شكل الشيت</b> <span class="small muted">مش لازم يبقى نفس الشكل كل مرة</span></summary>
+          <ul style="margin:0;padding-inline-start:20px">
+            <li>ارفع شيت المورد زي ما هو. البرنامج بيتعرّف على الأعمدة لوحده من عناوينها، وفي الخطوة ٢ تقدر تصلّح أي عمود اتربط غلط.</li>
+            <li><b>لازم يكون فيه:</b> عمود <b>اسم الصنف</b>، وعمود سعر واحد على الأقل (قطعة أو دستة أو كرتونة).</li>
+            <li><b>اختياري:</b> الكود، والقسم، وعدد القطع في الدستة، وعدد القطع في الكرتونة. لو فيه سعر كرتونة، حط عدد القطع اللي جواها علشان سعر القطعة يتحسب.</li>
+            <li>أول مرة ترفع لمورد، الربط بيتحفظ. المرة الجاية لنفس المورد الأعمدة بتترتب لوحدها، حتى لو اتغيّر ترتيبها، طالما العناوين زي ما هي.</li>
+            <li>الأسعار في الشيت هي <b>أسعار الشراء</b>. سعر البيع بيتحسب بالهامش.</li>
+          </ul>
+          <a class="btn" href="/api/admin/wholesale/imports/sample.xlsx" download style="justify-self:start">نزّل شيت نموذج (Excel)</a>
+        </details>` : '<div class="card empty">لازم تضيف مورد الأول. <button class="btn primary" id="to-suppliers">إضافة مورد</button></div>'}
       </div>
       <h3 style="margin:28px 0 10px">آخر الشيتات اللي اتحفظت</h3>
       <div id="imp-history"><p class="muted">بيحمّل…</p></div>`;
