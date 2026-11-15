@@ -8,6 +8,7 @@ from app import wholesale_notebook as wn
 from app import wholesale_orders as wo
 from app import wholesale_service as ws
 from app import wholesale_team as wt
+from app import wholesale_plus as wplus
 
 
 @pytest.fixture()
@@ -32,8 +33,22 @@ def shop(conn):
     ws.apply_import(conn, started["import_id"], {})
     owner = conn.execute("SELECT id FROM customers ORDER BY id LIMIT 1").fetchone()[0]
     wo.decide_trader(conn, owner, "approved", None, None)
+    # «فريقي» is a Rose Plus feature: the owner subscribes first
+    ws.update_settings(conn, {"plus_enabled": True, "plus_price_month": 150, "plus_price_quarter": 405})
+    wplus.decide_plus(conn, wplus.request_plus(conn, owner, "month", "cash")["id"], True, "", None)
     p = {x["code"]: x["id"] for x in ws.list_products(conn)["items"]}
     return {"owner": owner, "p": p}
+
+
+def test_team_needs_rose_plus(conn, shop):
+    owner = shop["owner"]
+    s = wt.add_staff(conn, owner, "حسن", "01055556666", {})
+    conn.execute("UPDATE ws_plus_subscriptions SET ends_at = '2000-01-01T00:00:00+00:00' WHERE customer_id = ?", (owner,))
+    for call in (lambda: wt.list_staff(conn, owner), lambda: wt.add_staff(conn, owner, "تاني", "01077778888", {}),
+                 lambda: wt.login(conn, "01055556666", s["pin"]), lambda: wt.owner_requests(conn, owner)):
+        with pytest.raises(ws.WholesaleError) as err:
+            call()
+        assert err.value.status == 403 and "روز بلس" in str(err.value)
 
 
 def test_add_staff_login_and_hidden_prices(conn, shop):

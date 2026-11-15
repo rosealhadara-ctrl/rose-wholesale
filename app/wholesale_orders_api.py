@@ -137,6 +137,19 @@ def _trader(request: Request) -> int:
     return int(customer["id"])
 
 
+def _shopper(request: Request) -> Optional[int]:
+    """The approved trader's id, or None for anyone else (visitor, or account not approved yet).
+
+    Browsing and the cart are open to everyone at the default tier's prices; ordering stays with _trader.
+    """
+    customer = current_customer(request)
+    if not customer:
+        return None
+    with ws_connect() as conn:
+        approved = wo.trader_status(conn, customer["id"])["status"] == "approved"
+    return int(customer["id"]) if approved else None
+
+
 # ---------------------------------------------------------------------- trader
 
 
@@ -156,7 +169,8 @@ def trader_page_redirect():
 def trader_me(request: Request):
     customer = current_customer(request)
     if not customer:
-        return {"logged_in": False}
+        with ws_connect() as conn:
+            return {"logged_in": False, "sections": wo.trader_sections(conn)}
     with ws_connect() as conn:
         trader = wo.trader_status(conn, customer["id"])
         data = {
@@ -167,12 +181,12 @@ def trader_me(request: Request):
             "shop_name": trader.get("shop_name", ""),
             "address": trader.get("address", ""),
             "area": trader.get("area", ""),
+            "sections": wo.trader_sections(conn),
         }
         if trader["status"] == "approved":
             from .wholesale_notebook import check_reminder
 
             check_reminder(conn, customer["id"])  # weekly notebook reminder, before counting unread
-            data["sections"] = wo.trader_sections(conn)
             data["announcement"] = ws.announcement_for_customer(conn, customer["id"])
             data["unread"] = wo.unread_count(conn, customer["id"])
             data["credit_overdue"] = wp.credit_summary(conn, customer["id"])["overdue"]
@@ -191,7 +205,7 @@ def trader_me(request: Request):
 
             data["team_pending"] = pending_count(conn, customer["id"])
             data["available_shortages"] = conn.execute(
-                "SELECT COUNT(*) FROM ws_shortages WHERE customer_id = ? AND status = 'available'", (customer["id"],)
+                "SELECT COUNT(*) FROM ws_shortages WHERE customer_id = ? AND status = 'available' AND source != 'request'", (customer["id"],)
             ).fetchone()[0]
     return data
 
@@ -208,15 +222,26 @@ def trader_join(payload: JoinIn, request: Request):
 
 @router.get("/api/wholesale/catalog")
 def trader_catalog(request: Request, q: str = "", section_id: Optional[int] = None, page: int = 1):
-    customer_id = _trader(request)
+    customer_id = _shopper(request)
     with ws_connect() as conn:
         return wo.catalog(conn, customer_id, q=q[:100], section_id=section_id, page=page)
 
 
+@router.get("/api/wholesale/home")
+def trader_home(request: Request):
+    """Storefront rows for the first page: sections with sample products, open to visitors."""
+    customer_id = _shopper(request)
+    with ws_connect() as conn:
+        return {"sections": wo.home_sections(conn, customer_id)}
+
+
 @router.post("/api/wholesale/cart/check")
 def trader_cart_check(payload: OrderIn, request: Request):
-    """Current prices for the products in the browser cart (prices may have changed)."""
-    customer_id = _trader(request)
+    """Current prices for the products in the browser cart (prices may have changed).
+
+    Visitors get the prices without checkout (no payment methods or delivery until approved).
+    """
+    customer_id = _shopper(request)
     ids = sorted({line.product_id for line in payload.items})
     with ws_connect() as conn:
         items = {i["id"]: i for i in wo.catalog(conn, customer_id, ids=ids, per_page=100)["items"]}
@@ -225,7 +250,7 @@ def trader_cart_check(payload: OrderIn, request: Request):
             info = items.get(line.product_id, {}).get("units", {}).get(line.unit)
             if info:
                 products += info["price"] * line.qty
-        checkout = wp.checkout(conn, customer_id, round(products, 2))
+        checkout = wp.checkout(conn, customer_id, round(products, 2)) if customer_id else None
     return {"items": {str(k): v for k, v in items.items()}, "checkout": checkout}
 
 
@@ -570,10 +595,10 @@ def admin_close_request(shortage_id: int, payload: CloseRequestIn, request: Requ
     _admin(request)
     try:
         with ws_connect() as conn:
-            wo.close_request(conn, shortage_id, payload.product_id, payload.message)
+            told = wo.close_request(conn, shortage_id, payload.product_id, payload.message)
     except ws.WholesaleError as exc:
         raise _fail(exc)
-    return {"ok": True}
+    return {"ok": True, "notified": told}
 
 
 @router.get("/api/admin/wholesale/trader-accounts")

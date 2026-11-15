@@ -72,6 +72,38 @@ def test_catalog_hides_supplier_data(conn, shop):
     assert wo.catalog(conn, c, q="زيت")["total"] == 1
 
 
+def test_home_sections_for_visitors(conn, shop):
+    drinks = ws.section_id_for(conn, "مشروبات")
+    conn.execute("UPDATE ws_products SET section_id = ? WHERE id IN (?, ?)", (drinks, shop["p"]["A1"], shop["p"]["B1"]))
+    rows = wo.home_sections(conn, None)
+    assert [s["name"] for s in rows] == ["مشروبات"]
+    names = {i["name"] for s in rows for i in s["items"]}
+    assert "عصير" in names
+    for s in rows:
+        assert s["items"] and len(s["items"]) <= 4
+        for item in s["items"]:
+            assert set(item) == {"id", "name", "image_url", "unit", "price"} and item["price"] > 0
+    juice = next(i for s in rows for i in s["items"] if i["name"] == "عصير")
+    listed = next(i for i in wo.catalog(conn, None)["items"] if i["name"] == "عصير")
+    assert juice["price"] == listed["units"][juice["unit"]]["price"]
+
+
+def test_linking_a_request_answers_the_same_name_everywhere(conn, shop):
+    c1, c2 = shop["c1"], shop["c2"]
+    for c in (c1, c2):
+        wo.decide_trader(conn, c, "approved", None, None)
+    wo.request_provision(conn, c1, "سماعات iphone", unit="piece")
+    wo.request_provision(conn, c1, "سماعات  iPhone", unit="dozen")
+    wo.request_provision(conn, c2, "سماعات iphone")
+    wo.request_provision(conn, c2, "شاحن سريع")
+    first = conn.execute("SELECT MIN(id) FROM ws_shortages WHERE source = 'request'").fetchone()[0]
+    assert wo.close_request(conn, first, shop["p"]["A1"]) == 2  # two traders told, once each
+    assert wo.customer_shortages(conn, c1) == []
+    assert [s["name"] for s in wo.customer_shortages(conn, c2)] == ["شاحن سريع"]
+    assert [n["kind"] for n in wo.notifications(conn, c1)["items"]].count("available") == 1
+    assert [r["name"] for r in wo.admin_shortages(conn)["requests"]] == ["شاحن سريع"]
+
+
 def test_full_order_flow(conn, shop):
     c, p = shop["c1"], shop["p"]
     wo.decide_trader(conn, c, "approved", None, None)
@@ -174,9 +206,10 @@ def test_provision_requests(conn, shop):
     wo.request_provision(conn, c, "صابون سائل", "ماركة معينة", "carton", 2)
     data = wo.admin_shortages(conn)
     assert data["requests"][0]["name"] == "صابون سائل"
-    wo.close_request(conn, data["requests"][0]["id"], shop["p"]["A2"])
-    mine = wo.customer_shortages(conn, c)
-    assert mine[0]["status"] == "available" and mine[0]["product"]["name"] == "بسكويت"
+    assert wo.close_request(conn, data["requests"][0]["id"], shop["p"]["A2"]) == 1
+    assert wo.customer_shortages(conn, c) == []  # answered: off the trader's shortages, the notification says so
+    note = wo.notifications(conn, c)["items"][0]
+    assert note["kind"] == "available" and note["product_id"] == shop["p"]["A2"] and "صابون سائل" in note["body"]
     wo.request_provision(conn, c, "شيء نادر")
     request = wo.admin_shortages(conn)["requests"][0]
     wo.close_request(conn, request["id"], None, "مش هنقدر نوفره حاليًا")

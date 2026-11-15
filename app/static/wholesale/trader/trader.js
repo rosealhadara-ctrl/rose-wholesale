@@ -75,8 +75,7 @@
   const cartCount = () => cart.reduce((s, l) => s + l.qty, 0);
   const cartTotal = () => cart.reduce((s, l) => s + l.qty * l.price, 0);
   function drawCartBar() {
-    const approved = state.me && state.me.trader_status === 'approved';
-    const show = approved && cart.length && !['cart', 'done'].includes(currentRoute().name);
+    const show = state.me && cart.length && !['cart', 'done', 'login', 'signup'].includes(currentRoute().name);
     document.getElementById('cart-bar').hidden = !show;
     document.getElementById('cart-bar-text').textContent = `${int(cart.length)} صنف · ${money(cartTotal())}`;
     const dot = document.getElementById('top-cart-count');
@@ -95,6 +94,8 @@
   window.addEventListener('hashchange', route);
 
   const ME_KEY = 'rose-wholesale-me-v1';
+  const SOCIAL = false; // «تجار قريبين» and «المحادثات» hidden for now
+  const hasPlus = () => !!(state.me && state.me.plus && state.me.plus.active);
   async function loadMe() {
     try {
       state.me = await api('GET', '/api/wholesale/me');
@@ -111,10 +112,18 @@
     const approved = state.me.trader_status === 'approved';
     if (state.me.must_change_password) sessionStorage.setItem('ws-change-password', '1');
     document.getElementById('shop-name').textContent = state.me.shop_name || state.me.name || '';
+    // Anyone can browse and fill the cart (Amazon style); the bottom nav is for approved traders only.
     document.getElementById('bottom-nav').hidden = !approved;
-    document.getElementById('top-cart').hidden = !approved;
-    document.getElementById('search-row').hidden = !approved;
-    drawCatBar(approved);
+    document.getElementById('top-cart').hidden = false;
+    document.getElementById('search-row').hidden = false;
+    const acct = document.getElementById('top-account');
+    acct.hidden = false;
+    acct.href = state.me.logged_in ? '#account' : '#login';
+    acct.setAttribute('aria-label', state.me.logged_in ? 'حسابي' : 'دخول أو حساب جديد');
+    document.getElementById('top-account-hi').textContent = state.me.logged_in ? `أهلًا ${state.me.name || ''}` : 'أهلًا، سجّل دخولك';
+    document.getElementById('top-account-label').textContent = state.me.logged_in ? 'حسابي' : 'الحساب';
+    state.home = null; // prices follow the account's tier, so reload the storefront rows
+    drawCatBar();
     const n = state.me.unread || 0;
     const badge = document.getElementById('notif-count');
     badge.hidden = !n;
@@ -122,7 +131,7 @@
     document.getElementById('short-dot').hidden = !state.me.available_shortages;
     document.getElementById('account-dot').hidden = !state.me.credit_overdue && !state.me.team_pending;
     const chatBtn = document.getElementById('top-chat');
-    chatBtn.hidden = !approved;
+    chatBtn.hidden = !approved || !SOCIAL;
     document.getElementById('top-chat-count').hidden = !state.me.chat_unread;
     document.getElementById('top-chat-count').textContent = state.me.chat_unread > 99 ? '99+' : int(state.me.chat_unread || 0);
   }
@@ -140,10 +149,16 @@
     document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('on', a.dataset.nav === r.name || (r.name === 'order' && a.dataset.nav === 'orders')));
     drawCartBar();
     view.classList.remove('wide');
-    if (!state.me.logged_in) return renderLogin();
-    if (state.me.trader_status !== 'approved') return renderGate();
+    if (state.me.trader_status !== 'approved') {
+      // Visitors and accounts waiting for approval can browse and fill the cart; ordering needs approval.
+      if (r.name === 'login' || r.name === 'signup') return state.me.logged_in ? renderGate() : renderLogin(r.name);
+      if (r.name === 'cart') return renderCart();
+      if (r.name === 'catalog' || !r.name) return renderCatalog();
+      return state.me.logged_in ? renderGate() : renderLogin();
+    }
     if (state.offline && r.name !== 'shortages') return renderOffline();
-    const pages = { catalog: renderCatalog, cart: renderCart, orders: renderOrders, order: renderOrder, shortages: renderShortages, notifications: renderNotifications, account: renderAccount, done: renderDone, plus: renderPlus, nearby: renderNearby, chats: renderChats, chat: renderChat, team: renderTeam, 'team-requests': renderTeamRequests };
+    const pages = { catalog: renderCatalog, cart: renderCart, orders: renderOrders, order: renderOrder, shortages: renderShortages, notifications: renderNotifications, account: renderAccount, done: renderDone, plus: renderPlus, team: hasPlus() ? renderTeam : renderTeamLocked, 'team-requests': hasPlus() ? renderTeamRequests : renderTeamLocked };
+    if (SOCIAL) Object.assign(pages, { nearby: renderNearby, chats: renderChats, chat: renderChat });
     (pages[r.name] || renderCatalog)(r.id);
   }
 
@@ -153,7 +168,7 @@
     view.innerHTML = signup ? `
       <div class="gate card stack">
         <h2>حساب جديد في روز جملة</h2>
-        <p class="muted" style="margin:0">اكتب بياناتك وبيانات محلك. الإدارة هتراجع الطلب، وأول ما يتقبل هتشوف الأسعار وتطلب.</p>
+        <p class="muted" style="margin:0">اكتب بياناتك وبيانات محلك. الإدارة هتراجع الطلب، وأول ما يتقبل تقدر تبعت طلباتك بأسعار شريحتك.</p>
         <label class="field">اسمك<input type="text" id="s-name" maxlength="80" autocomplete="name"></label>
         <label class="field">رقم الموبايل<input type="tel" id="s-phone" inputmode="tel" autocomplete="tel" dir="ltr" placeholder="01xxxxxxxxx"></label>
         <label class="field">كلمة السر (8 حروف أو أرقام على الأقل)<input type="password" id="s-pass" autocomplete="new-password" dir="ltr" minlength="8"></label>
@@ -161,7 +176,8 @@
         <label class="field">المنطقة<input type="text" id="s-area" maxlength="120"></label>
         <label class="field">العنوان بالتفصيل (للتوصيل)<input type="text" id="s-address" maxlength="300" placeholder="الشارع، علامة مميزة"></label>
         <button class="btn primary block" id="s-go">سجّل وابعت طلب الانضمام</button>
-        <p class="small muted" style="margin:0">عندك حساب؟ <a href="#login" id="to-login">ادخل من هنا</a>.</p>
+        <p class="small muted" style="margin:0">عندك حساب؟ <a href="#login">ادخل من هنا</a>.</p>
+        <a class="btn ghost block" href="#catalog">كمّل تصفّح من غير حساب</a>
       </div>` : `
       <div class="gate card stack">
         <h2>أهلًا بيك في روز جملة</h2>
@@ -171,29 +187,35 @@
         <button class="btn primary block" id="l-go">دخول</button>
         <button class="btn block" id="to-signup">تاجر جديد؟ سجّل حساب</button>
         <p class="small muted" style="margin:0">نسيت كلمة السر؟ كلّمنا، وهنبعتلك كلمة سر مؤقتة.</p>
+        <a class="btn ghost block" href="#catalog">كمّل تصفّح من غير حساب</a>
       </div>`;
     if (signup) {
-      document.getElementById('to-login').onclick = (e) => { e.preventDefault(); renderLogin(); };
       document.getElementById('s-go').onclick = (e) => run(e.target, async () => {
         const v = (id) => document.getElementById(id).value.trim();
         await api('POST', '/api/wholesale/auth/signup', { name: v('s-name'), phone: v('s-phone'), password: document.getElementById('s-pass').value, shop_name: v('s-shop'), area: v('s-area'), address: v('s-address') });
-        state.me = null;
-        route();
+        afterAuth('#account');
       });
       return;
     }
-    document.getElementById('to-signup').onclick = () => renderLogin('signup');
+    document.getElementById('to-signup').onclick = () => { location.hash = '#signup'; };
     const go = () => run(document.getElementById('l-go'), async () => {
       const phone = document.getElementById('l-phone').value.trim();
       const password = document.getElementById('l-pass').value;
       if (!phone || !password) throw new Error('اكتب رقم الموبايل وكلمة السر');
       const res = await api('POST', '/api/wholesale/auth/login', { phone, password });
-      state.me = null;
       if (res.must_change_password) sessionStorage.setItem('ws-change-password', '1');
-      route();
+      afterAuth(cart.length ? '#cart' : '#catalog');
     });
     document.getElementById('l-go').onclick = go;
     document.getElementById('l-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+  }
+
+  // After login or signup from #login/#signup, go where the visitor was heading (the cart stays in the browser).
+  function afterAuth(next) {
+    state.me = null;
+    const r = currentRoute().name;
+    if ((r === 'login' || r === 'signup') && location.hash !== next) location.hash = next;
+    else route();
   }
 
   async function logout() {
@@ -212,7 +234,7 @@
   function renderGate() {
     const s = state.me.trader_status;
     if (s === 'pending') {
-      view.innerHTML = `<div class="gate card stack"><h2>طلبك بيتراجع</h2><p class="muted" style="margin:0">استلمنا طلب انضمامك للجملة باسم «${esc(state.me.shop_name)}». أول ما يتقبل هتقدر تشوف الأسعار وتطلب.</p><button class="btn" id="refresh">تحديث</button>${gateLogout}</div>`;
+      view.innerHTML = `<div class="gate card stack"><h2>طلبك بيتراجع</h2><p class="muted" style="margin:0">استلمنا طلب انضمامك للجملة باسم «${esc(state.me.shop_name)}». لحد ما يتقبل تقدر تتفرج على الأصناف وتجهّز سلتك، وأول ما يتقبل تبعت الطلب.</p><a class="btn primary" href="#catalog">تصفّح الأصناف</a><button class="btn" id="refresh">تحديث</button>${gateLogout}</div>`;
       document.getElementById('refresh').onclick = () => { state.me = null; route(); };
       bindGateLogout();
       return;
@@ -266,10 +288,10 @@
   });
 
   // Amazon-style department strip under the header; shown on every page.
-  function drawCatBar(approved) {
+  function drawCatBar() {
     const bar = document.getElementById('cat-bar');
     const sections = (state.me && state.me.sections) || [];
-    bar.hidden = !approved || sections.length < 2;
+    bar.hidden = sections.length < 2;
     if (bar.hidden) return;
     bar.innerHTML = `<div class="cat-inner"><button data-s="" aria-pressed="${!state.section}">الكل</button>${sections.map((s) => `<button data-s="${s.id}" aria-pressed="${String(state.section) === String(s.id)}">${esc(s.name)}</button>`).join('')}</div>`;
     bar.querySelectorAll('button').forEach((b) => (b.onclick = () => {
@@ -285,8 +307,10 @@
     const ann = me.announcement;
     view.classList.add('wide');
     view.innerHTML = `
+      ${statusNote()}
       ${plusStrip(me)}
       ${ann ? `<section class="promo"><b>${esc(ann.title)}</b><p>${esc(ann.text)}</p>${ann.request_pending ? '<span class="sent">طلبك وصل، والإدارة بتراجعه.</span>' : '<button class="btn sm" id="sub-req">اطلب الاشتراك</button>'}</section>` : ''}
+      <div id="home"></div>
       <div id="hero"></div>
       <div id="results-bar"></div>
       <div id="products"><p class="empty">بيحمّل…</p></div>`;
@@ -295,12 +319,74 @@
     loadCatalog();
   }
 
+  // Logged in but not approved yet: one line on top saying why ordering is closed.
+  function statusNote() {
+    const me = state.me;
+    if (!me.logged_in || me.trader_status === 'approved') return '';
+    const text = {
+      pending: 'طلب انضمامك بيتراجع. تقدر تتفرج وتجهّز سلتك، وأول ما يتقبل تبعت الطلب.',
+      suspended: 'حسابك في الجملة واقف مؤقتًا. كلّمنا علشان نرجّعه.',
+      rejected: 'طلب انضمامك اللي فات ماتقبلش. ابعت طلب جديد من «حسابي».',
+    }[me.trader_status] || 'كمّل بيانات محلك وابعت طلب الانضمام علشان تقدر تطلب.';
+    return `<a class="alert info status-note" href="#account">${esc(text)}</a>`;
+  }
+
+  const isHome = () => !state.q && !state.section && state.page === 1;
+  // Strong colour pairs for the storefront cards; white text sits on the darker first colour.
+  const TINTS = [['#C2410C', '#FB923C'], ['#1D4ED8', '#60A5FA'], ['#047857', '#34D399'], ['#7E22CE', '#C084FC'], ['#BE123C', '#FB7185'], ['#0E7490', '#22D3EE']];
+  const pic = (url, name) => (url ? `<img src="${esc(url)}" alt="" loading="lazy">` : `<span class="p-letter">${esc(String(name || '').trim().charAt(0))}</span>`);
+
+  function openSection(id) {
+    state.section = String(id); state.page = 1; state.q = '';
+    document.getElementById('search').value = '';
+    drawCatBar();
+    if (currentRoute().name === 'catalog') { loadCatalog(); window.scrollTo(0, 0); } else location.hash = '#catalog';
+  }
+
+  // Storefront on the plain first page: big section cards in a sideways row, then four products per section.
+  async function drawHome() {
+    const box = document.getElementById('home');
+    if (!box) return;
+    if (!isHome()) { box.innerHTML = ''; return; }
+    if (!state.home) {
+      try { state.home = (await api('GET', '/api/wholesale/home')).sections; } catch (_) { state.home = []; }
+    }
+    if (!box.isConnected || !isHome()) return;
+    const secs = state.home;
+    if (!secs.length) { box.innerHTML = ''; return; }
+    const cover = (s) => s.items.find((i) => i.image_url) || s.items[0] || {};
+    box.innerHTML = `
+      <section class="rail-wrap" aria-label="الأقسام">
+        <button class="rail-arrow prev" aria-label="اللي قبله">›</button>
+        <div class="rail" id="rail">${secs.map((s, i) => `
+          <button class="rail-card" data-s="${s.id}" style="--c1:${TINTS[i % TINTS.length][0]};--c2:${TINTS[i % TINTS.length][1]}">
+            <b>${esc(s.name)}</b><span class="small">${int(s.products)} صنف</span>
+            <span class="rail-pic">${pic(cover(s).image_url, s.name)}</span>
+          </button>`).join('')}</div>
+        <button class="rail-arrow next" aria-label="اللي بعده">‹</button>
+      </section>
+      <div class="boxes">${secs.slice(0, 8).map((s, i) => `
+        <section class="box" style="--bar:${TINTS[i % TINTS.length][0]}"><h3>${esc(s.name)}</h3>
+          <div class="box-grid">${s.items.map((it) => `
+            <button class="box-item" data-s="${s.id}"><span class="box-img">${pic(it.image_url, it.name)}</span><span class="box-name">${esc(it.name)}</span><span class="box-price num">${money(it.price)} / ${UNIT[it.unit]}</span></button>`).join('')}</div>
+          <button class="box-more" data-s="${s.id}">شوف كل ${esc(s.name)} ‹</button>
+        </section>`).join('')}</div>`;
+    box.querySelectorAll('[data-s]').forEach((b) => (b.onclick = () => openSection(b.dataset.s)));
+    const rail = document.getElementById('rail');
+    const step = () => Math.max(260, rail.clientWidth * 0.8);
+    box.querySelector('.rail-arrow.prev').onclick = () => rail.scrollBy({ left: step(), behavior: 'smooth' });
+    box.querySelector('.rail-arrow.next').onclick = () => rail.scrollBy({ left: -step(), behavior: 'smooth' });
+  }
+
   // Welcome banner on the plain first page only; searches and departments go straight to results.
   function drawHero() {
     const box = document.getElementById('hero');
     if (!box) return;
-    const home = !state.q && !state.section && state.page === 1 && !state.me.announcement;
-    box.innerHTML = home ? `<section class="hero"><span class="hero-kicker">أسعار جملة لمحلك</span><b>أهلًا ${esc(state.me.shop_name || state.me.name || '')}</b><p>اطلب بالقطعة أو الدستة أو الكرتونة، وكل ما تكبّر الوحدة توفّر أكتر.</p></section>` : '';
+    const me = state.me;
+    const home = isHome() && !me.announcement && !(state.home && state.home.length);
+    const hello = me.logged_in ? `أهلًا ${esc(me.shop_name || me.name || '')}` : 'أهلًا بيك في روز جملة';
+    const cta = me.logged_in ? '' : '<div class="hero-cta"><a class="btn primary sm" href="#signup">سجّل حساب تاجر</a><a class="btn sm" href="#login">عندي حساب</a></div>';
+    box.innerHTML = home ? `<section class="hero"><span class="hero-kicker">أسعار جملة لمحلك</span><b>${hello}</b><p>اطلب بالقطعة أو الدستة أو الكرتونة، وكل ما تكبّر الوحدة توفّر أكتر.</p>${cta}</section>` : '';
   }
 
   function drawResultsBar(data) {
@@ -309,9 +395,16 @@
     const section = (state.me.sections || []).find((s) => String(s.id) === String(state.section));
     const title = state.q ? `نتايج «${esc(state.q)}»` : section ? esc(section.name) : 'كل الأصناف';
     const range = `${int(data.total)} صنف${data.pages > 1 ? ` · صفحة ${int(data.page)} من ${int(data.pages)}` : ''}`;
-    box.innerHTML = data.total ? `<div class="results-bar"><h2>${title}</h2><span class="muted small">${range}</span>${state.q ? '<button class="btn ghost sm" id="clear-q">امسح البحث</button>' : ''}</div>` : '';
+    // Nothing had every word: say these are only the closest names, and keep the way to ask for the exact item.
+    const approved = state.me.trader_status === 'approved';
+    const near = data.approximate && state.q
+      ? `<div class="alert info" style="margin-bottom:12px">مش لاقيين «${esc(state.q)}» بالظبط. دي أقرب حاجات عندنا.${approved ? ' <button class="btn ghost sm" id="near-request">مش لاقي اللي عايزه؟ اطلب توفيره</button>' : ''}</div>`
+      : '';
+    box.innerHTML = data.total ? `${near}<div class="results-bar"><h2>${data.approximate ? 'أقرب النتايج' : title}</h2><span class="muted small">${range}</span>${state.q ? '<button class="btn ghost sm" id="clear-q">امسح البحث</button>' : ''}</div>` : '';
     const clear = document.getElementById('clear-q');
     if (clear) clear.onclick = () => { state.q = ''; state.page = 1; document.getElementById('search').value = ''; loadCatalog(); };
+    const ask = document.getElementById('near-request');
+    if (ask) ask.onclick = () => { sessionStorage.setItem('ws-request', state.q); location.hash = '#shortages'; };
   }
 
   async function loadCatalog() {
@@ -324,11 +417,16 @@
     let data;
     try { data = await api('GET', '/api/wholesale/catalog?' + params); } catch (e) { box.innerHTML = `<div class="alert bad">${esc(e.message)}</div>`; return; }
     if (stale(seq) || !box.isConnected) return;
+    await drawHome();
+    if (stale(seq) || !box.isConnected) return;
     state.catalog = data;
     drawHero();
     drawResultsBar(data);
     if (!data.items.length) {
-      box.innerHTML = state.q
+      const approved = state.me.trader_status === 'approved';
+      box.innerHTML = state.q && !approved
+        ? `<div class="empty"><b>مفيش «${esc(state.q)}» عندنا دلوقتي</b>جرّب اسم تاني أو اختار قسم.</div>`
+        : state.q
         ? `<div class="empty"><b>مفيش «${esc(state.q)}» عندنا دلوقتي</b>سجّله طلب توفير، وهنبلغك لو وفّرناه.<br><br><button class="btn primary" id="to-request">سجّله طلب توفير</button></div>`
         : '<div class="empty"><b>مفيش أصناف هنا لسه</b></div>';
       const tr = document.getElementById('to-request');
@@ -414,6 +512,8 @@
       if (!info) { notes.push(`«${l.name}» بال${UNIT[l.unit]} مش متاح دلوقتي واتشال من السلة`); return false; }
       if (info.price !== l.price) notes.push(`سعر «${l.name}» اتغيّر من ${money(l.price)} لـ ${money(info.price)}`);
       l.price = info.price; l.name = p.name; l.pieces = info.pieces;
+      // Every unit this product is sold in, so the cart can switch قطعة / دستة / كرتونة.
+      l.units = Object.fromEntries(UNITS.filter(([u]) => p.units[u]).map(([u]) => [u, { price: p.units[u].price, pieces: p.units[u].pieces }]));
       return true;
     });
     saveCart();
@@ -461,6 +561,26 @@
       </label>`).join('')}</fieldset>`;
   }
 
+  // Switch a cart line to another unit; if the same product is already there in that unit, merge the two lines.
+  function changeUnit(i, unit) {
+    const line = cart[i];
+    const info = line && line.units && line.units[unit];
+    if (!info || line.unit === unit) return;
+    const twin = cart.find((x, j) => j !== i && x.product_id === line.product_id && x.unit === unit);
+    if (twin) {
+      twin.qty = Math.min(9999, twin.qty + line.qty);
+      if (line.note && !twin.note) twin.note = line.note;
+      cart.splice(i, 1);
+      toast(`«${line.name}» اتجمع مع نفس الصنف بال${UNIT[unit]}`);
+    } else {
+      line.unit = unit; line.price = info.price; line.pieces = info.pieces;
+    }
+    saveCart();
+    const note = document.getElementById('order-note');
+    drawCart([], note ? note.value : '');
+    refreshCart();
+  }
+
   function drawCart(notes, keptNote) {
     const co = state.checkout;
     const chosen = co ? co.methods.find((m) => m.code === state.payMethod) : null;
@@ -473,13 +593,15 @@
           <div class="line-top"><div><div class="line-name">${esc(l.name)}</div><div class="small muted">${money(l.price)} لل${UNIT[l.unit]}${l.unit !== 'piece' && l.pieces ? ` · القطعة ${money(l.price / l.pieces)}` : ''}</div></div><b class="num">${money(l.qty * l.price)}</b></div>
           <div class="row">
             <div class="stepper"><button data-step="1" aria-label="زوّد">+</button><input type="number" inputmode="numeric" min="1" max="9999" value="${l.qty}" aria-label="الكمية"><button data-step="-1" aria-label="قلّل">−</button></div>
-            <span class="small muted">${UNIT[l.unit]}</span><span class="spacer"></span>
+            ${l.units && Object.keys(l.units).length > 1
+              ? `<div class="seg line-units" role="group" aria-label="الوحدة">${UNITS.filter(([u]) => l.units[u]).map(([u, label]) => `<button data-u="${u}" aria-pressed="${u === l.unit}">${label}</button>`).join('')}</div>`
+              : `<span class="small muted">${UNIT[l.unit]}</span>`}<span class="spacer"></span>
             <button class="btn ghost sm danger" data-remove>شيل</button>
           </div>
           <input type="text" class="note" maxlength="200" placeholder="ملاحظة للصنف ده (مثلًا: لون معين)" value="${esc(l.note || '')}">
         </div>`).join('')}
       </section>
-      <section class="card stack">
+      ${state.me.trader_status !== 'approved' ? guestCheckout() : `<section class="card stack">
         ${co && co.blocked ? `<div class="alert bad">${esc(co.blocked_reason)} <a href="#account">حسابي</a></div>` : ''}
         ${co && co.below_min ? `<div class="alert warn">أقل قيمة للطلب ${money(co.min_order)}. فاضل ${money(co.min_order - cartTotal())}.</div>` : ''}
         ${co ? methodPicker(co) : ''}
@@ -494,7 +616,7 @@
         ${co && co.plus.offer && co.plus.offer_delivery > 0 ? `<a class="plus-strip" href="#plus"><span class="plus-badge">بلس</span><span>مع روز بلس التوصيل ده (${money(co.plus.offer_delivery)}) يبقى مجاني</span><span class="plus-go">اعرف أكتر</span></a>` : ''}
         <div class="alert info">${chosen && ['instapay', 'wallet'].includes(chosen.code) ? 'هنراجع الطلب الأول، وبعدها تحوّل الإجمالي النهائي وترفع صورة التحويل من صفحة الطلب.' : chosen && chosen.code === 'credit' ? 'المبلغ هيتسجّل على حسابك لما الطلب يتسلّم.' : 'هتدفع كاش لما الطلب يوصلك.'} لو صنف طلع مش متوفر هنشيله ونسجّله في نواقصك.</div>
         <button class="btn primary block" id="submit" ${!co || co.blocked || co.below_min || !state.payMethod ? 'disabled' : ''}>ابعت الطلب</button>
-      </section>` : '<div class="empty"><b>السلة فاضية</b><a class="btn primary" href="#catalog">روح للجملة</a></div>'}`;
+      </section>`}` : '<div class="empty"><b>السلة فاضية</b><a class="btn primary" href="#catalog">روح للجملة</a></div>'}`;
     const clear = document.getElementById('clear');
     if (clear) clear.onclick = () => { if (confirm('تفضّي السلة كلها؟')) { cart = []; saveCart(); drawCart(); } };
     view.querySelectorAll('[name=pay]').forEach((r) => (r.onchange = () => { state.payMethod = r.value; drawCart([], document.getElementById('order-note').value); }));
@@ -511,6 +633,7 @@
       row.querySelectorAll('[data-step]').forEach((b) => (b.onclick = () => update((parseInt(qty.value, 10) || 1) + Number(b.dataset.step))));
       qty.onchange = () => update(parseInt(qty.value, 10));
       row.querySelector('[data-remove]').onclick = () => { cart.splice(i, 1); saveCart(); if (cart.length) refreshCart(); else drawCart(); };
+      row.querySelectorAll('[data-u]').forEach((b) => (b.onclick = () => changeUnit(i, b.dataset.u)));
       row.querySelector('.note').onchange = (e) => { cart[i].note = e.target.value.trim(); saveCart(); };
     });
     const submit = document.getElementById('submit');
@@ -533,6 +656,23 @@
         throw e;
       }
     });
+  }
+
+  // Cart footer for visitors and accounts not approved yet: the total, and the way to an account.
+  function guestCheckout() {
+    const me = state.me;
+    const total = `<div class="totals"><div class="grand"><span>الأصناف (${int(cart.length)})</span><span class="num">${money(cartTotal())}</span></div></div>`;
+    if (!me.logged_in) {
+      return `<section class="card stack">${total}
+        <div class="alert info">علشان تبعت الطلب سجّل حساب تاجر أو ادخل بحسابك. السلة هتفضل محفوظة، والتوصيل وطرق الدفع هيظهروا بعد الدخول.</div>
+        <a class="btn primary block" href="#signup">سجّل حساب تاجر</a>
+        <a class="btn block" href="#login">عندي حساب، ادخل</a>
+      </section>`;
+    }
+    const text = me.trader_status === 'pending'
+      ? 'طلب انضمامك لسه بيتراجع. أول ما يتقبل تقدر تبعت الطلب من هنا، والسلة هتفضل محفوظة.'
+      : 'حسابك لسه مش متفعّل في الجملة. شوف حالة حسابك من «حسابي».';
+    return `<section class="card stack">${total}<div class="alert info">${text}</div><a class="btn block" href="#account">حسابي</a></section>`;
   }
 
   function renderDone() {
@@ -782,6 +922,14 @@
       <div>كود <b>${esc(s.name)}</b>: <b class="num" style="font-size:22px;letter-spacing:4px">${esc(s.pin)}</b></div>
       <div class="small">الكود بيظهر مرة واحدة بس. ابعته للموظف دلوقتي.</div>
       <a class="btn sm primary" href="https://wa.me/2${esc(s.phone)}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">ابعته واتساب</a></div>`;
+  }
+
+  // The team is a Rose Plus feature: without an active subscription, say so and point to Plus.
+  function renderTeamLocked() {
+    const open = state.me.plus && state.me.plus.enabled;
+    view.innerHTML = `<div class="gate card stack"><h2>فريقي <span class="plus-badge">بلس</span></h2>
+      <p class="muted" style="margin:0">«فريقي» بتعمل حسابات لموظفين محلك: يطلبوا من الجملة، وإنت توافق قبل ما الطلب يتبعت. متاحة لمشتركين روز بلس بس${open ? '' : '، والاشتراك مقفول دلوقتي'}.</p>
+      ${open ? '<a class="btn primary" href="#plus">اشترك في روز بلس</a>' : ''}<a class="btn ghost" href="#account">رجوع</a></div>`;
   }
 
   async function renderTeam() {
@@ -1115,8 +1263,9 @@
     const month = p.plans.find((x) => x.code === 'month');
     const perks = [
       p.free_delivery ? ['التوصيل مجاني', p.delivery_fee ? `بدل ${money(p.delivery_fee)} على كل طلب.` : 'على كل طلباتك.'] : null,
-      p.fee_share_percent < 100 ? ['عمولة دفع أقل', p.fee_share_percent ? `بتدفع ${int(p.fee_share_percent)}٪ بس من عمولة المحفظة وانستاباي.` : 'من غير عمولة على المحفظة وانستاباي.'] : null,
+      p.fee_share_percent < 100 ? ['عمولة دفع أقل', p.fee_share_percent ? `بتدفع ${int(p.fee_share_percent)}٪ بس من عمولة المحفظة.` : 'من غير عمولة على المحفظة.'] : null,
       ['طلبك بيتجهز الأول', 'طلبات روز بلس ليها أولوية عند فريق التجهيز.'],
+      ['فريقي', 'حسابات لموظفين محلك يطلبوا منها، وإنت توافق قبل ما الطلب يتبعت.'],
     ].filter(Boolean);
     const canRequest = p.enabled && p.plans.length && !p.pending;
     view.innerHTML = `
@@ -1212,11 +1361,13 @@
           </div></details>
       </section>
       ${state.me.plus && (state.me.plus.enabled || state.me.plus.active) ? `<a class="card row plus-link" href="#plus"><span class="plus-badge">بلس</span><span style="flex:1"><b>روز بلس</b><br><span class="small muted">${state.me.plus.active ? `شغّال لحد ${dateText(state.me.plus.ends_at)}` : 'التوصيل مجاني وطلبك بيتجهز الأول'}</span></span><span aria-hidden="true">‹</span></a>` : ''}
-      <section class="card account-links">
-        <a href="#team"><b>فريقي</b><span class="small muted">${state.me.team_pending ? `${int(state.me.team_pending)} قايمة مستنية موافقتك` : 'موظفين المحل وصلاحياتهم'}</span></a>
-        <a href="#nearby"><b>تجار قريبين</b><span class="small muted">اطلبوا مع بعض وقسّموا كرتونة</span></a>
-        <a href="#chats"><b>المحادثات</b><span class="small muted">${state.me.chat_unread ? `${int(state.me.chat_unread)} رسالة جديدة` : 'كلامك مع التجار'}</span></a>
-      </section>
+      ${hasPlus() || (state.me.plus && state.me.plus.enabled) || SOCIAL ? `<section class="card account-links">
+        ${hasPlus()
+          ? `<a href="#team"><b>فريقي</b><span class="small muted">${state.me.team_pending ? `${int(state.me.team_pending)} قايمة مستنية موافقتك` : 'موظفين المحل وصلاحياتهم'}</span></a>`
+          : state.me.plus && state.me.plus.enabled ? '<a href="#plus"><b>فريقي <span class="plus-badge">بلس</span></b><span class="small muted">حسابات لموظفين محلك. متاحة مع روز بلس</span></a>' : ''}
+        ${SOCIAL ? `<a href="#nearby"><b>تجار قريبين</b><span class="small muted">اطلبوا مع بعض وقسّموا كرتونة</span></a>
+        <a href="#chats"><b>المحادثات</b><span class="small muted">${state.me.chat_unread ? `${int(state.me.chat_unread)} رسالة جديدة` : 'كلامك مع التجار'}</span></a>` : ''}
+      </section>` : ''}
       <section class="card stack">
         <h3>عنوان التوصيل</h3>
         ${state.me.area ? `<div class="small muted">المنطقة: ${esc(state.me.area)}</div>` : ''}
@@ -1679,15 +1830,22 @@
   }
 
   // -------------------------------------------------------- notifications
+  const productFromTitle = (title) => ((String(title).match(/«(.+)»/) || [])[1] || '');
+
   async function renderNotifications() {
     view.innerHTML = '<div class="page-title"><h2>الإشعارات</h2></div><div id="n-list"><p class="empty">بيحمّل…</p></div>';
     const seq = routeSeq;
     const data = await run(null, () => api('GET', '/api/wholesale/notifications'));
     if (!data || stale(seq)) return;
     document.getElementById('n-list').innerHTML = data.items.length ? data.items.map((n) => `
-      <${n.order_id ? `a href="#order/${n.order_id}"` : n.kind === 'available' || n.kind === 'notebook' ? 'a href="#shortages"' : n.kind === 'split' ? 'a href="#nearby"' : n.kind === 'plus' ? 'a href="#plus"' : n.kind === 'team' ? 'a href="#team-requests"' : 'div'} class="notice${n.read_at ? '' : ' unread'}" style="text-decoration:none;color:inherit">
+      <${n.order_id ? `a href="#order/${n.order_id}"` : n.kind === 'available' && n.product_id ? `a href="#catalog" data-find="${esc(productFromTitle(n.title))}"` : n.kind === 'available' || n.kind === 'notebook' ? 'a href="#shortages"' : n.kind === 'split' && SOCIAL ? 'a href="#nearby"' : n.kind === 'plus' ? 'a href="#plus"' : n.kind === 'team' ? 'a href="#team-requests"' : 'div'} class="notice${n.read_at ? '' : ' unread'}" style="text-decoration:none;color:inherit">
         <b>${esc(n.title)}</b>${n.body ? `<span>${esc(n.body)}</span>` : ''}<time>${when(n.created_at)}</time>
-      </${n.order_id || ['available', 'notebook', 'split', 'plus', 'team'].includes(n.kind) ? 'a' : 'div'}>`).join('') : '<div class="empty"><b>مفيش إشعارات</b></div>';
+      </${n.order_id || ['available', 'notebook', 'plus', 'team'].includes(n.kind) || (n.kind === 'split' && SOCIAL) ? 'a' : 'div'}>`).join('') : '<div class="empty"><b>مفيش إشعارات</b></div>';
+    // "«X» بقى متوفر": open the catalog searching for X.
+    view.querySelectorAll('[data-find]').forEach((a) => (a.onclick = () => {
+      state.q = a.dataset.find; state.section = ''; state.page = 1;
+      document.getElementById('search').value = state.q;
+    }));
     if (data.unread) {
       await api('POST', '/api/wholesale/notifications/read').catch(() => {});
       document.getElementById('notif-count').hidden = true;

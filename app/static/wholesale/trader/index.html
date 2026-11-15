@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#3B2A2F">
+  <meta name="theme-color" content="#1E2A44">
   <title>روز جملة</title>
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
-  <link rel="stylesheet" href="/static/wholesale/trader/trader.css?v=9">
-  <script src="/static/wholesale/trader/trader.js?v=11" defer></script>
+  <link rel="stylesheet" href="/static/wholesale/trader/trader.css?v=15">
+  <script src="/static/wholesale/trader/trader.js?v=22" defer></script>
   <script src="/static/wholesale/pw-toggle.js?v=2" defer></script>
 </head>
 <body>
@@ -27,6 +27,10 @@
         </button>
       </form>
       <span class="top-actions">
+      <a class="icon-btn cart-btn acct-btn" id="top-account" href="#login" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>
+        <span class="cart-label acct-label"><small id="top-account-hi">أهلًا، سجّل دخولك</small><b id="top-account-label">الحساب</b></span>
+      </a>
       <button class="icon-btn" id="top-chat" aria-label="المحادثات" hidden>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4V5Z"/><path d="M8 9h8M8 12h5"/></svg>
         <span class="dot" id="top-chat-count" hidden></span>

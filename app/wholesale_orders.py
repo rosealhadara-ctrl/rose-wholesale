@@ -24,6 +24,7 @@ from .db import utc_now
 from .wholesale_pricing import (
     UNIT_LABELS,
     UNITS,
+    default_tier,
     get_settings,
     load_offers,
     load_tier_prices,
@@ -31,6 +32,7 @@ from .wholesale_pricing import (
     tier_for_customer,
 )
 from .wholesale_service import WholesaleError, clean_text, normalize_name
+from . import wholesale_search as wsearch
 from . import wholesale_payments as wp
 
 SUFFIXES = "أبجدهوزحطيكلمنسعفصقرشتثخذضظغ"
@@ -201,13 +203,14 @@ def decide_trader(conn: sqlite3.Connection, customer_id: int, status: str, tier_
 # --------------------------------------------------------------------- catalog
 
 
-def catalog(conn: sqlite3.Connection, customer_id: int, q: str = "", section_id: Optional[int] = None,
+def catalog(conn: sqlite3.Connection, customer_id: Optional[int], q: str = "", section_id: Optional[int] = None,
             page: int = 1, per_page: int = 40, ids: Optional[List[int]] = None) -> Dict[str, Any]:
     """Products the trader can order, priced for their tier only.
 
+    customer_id None means a visitor browsing before approval: they see the default tier's prices.
     No supplier, cost or tier information leaves this function.
     """
-    tier = tier_for_customer(conn, customer_id)
+    tier = tier_for_customer(conn, customer_id) if customer_id else default_tier(conn)
     settings = get_settings(conn)
     where = [
         "p.is_visible = 1",
@@ -215,10 +218,16 @@ def catalog(conn: sqlite3.Connection, customer_id: int, q: str = "", section_id:
         "WHERE o.product_id = p.id AND o.is_active = 1 AND s.is_active = 1)",
     ]
     params: List[Any] = []
+    terms = wsearch.query_terms(normalize_name(q)) if q else []
+    q_at = len(where)  # position of the search condition, swapped below for the "closest" search
     if q:
-        key = normalize_name(q)
-        where.append("(p.name_key LIKE ? OR p.code LIKE ?)")
-        params += [f"%{key}%", f"%{q.strip()}%"]
+        if terms:
+            words, word_params = wsearch.all_words(terms, "p.name_key")
+            where.append(f"(({words}) OR p.code LIKE ?)")
+            params += word_params + [f"%{q.strip()}%"]
+        else:
+            where.append("p.code LIKE ?")
+            params.append(f"%{q.strip()}%")
     if section_id:
         where.append("p.section_id = ?")
         params.append(section_id)
@@ -229,14 +238,23 @@ def catalog(conn: sqlite3.Connection, customer_id: int, q: str = "", section_id:
         params += list(ids)
     base = "FROM ws_products p LEFT JOIN ws_sections s ON s.id = p.section_id WHERE " + " AND ".join(where)
     total = conn.execute("SELECT COUNT(*) " + base, params).fetchone()[0]
+    order, order_params, approximate = "s.sort_order, s.name, p.name_key", [], False
+    if not total and len(terms) > 1 and ids is None:
+        # Nothing has every word: show the closest names (most words in common) instead of nothing.
+        points, point_params = wsearch.score(terms, "p.name_key")
+        where[q_at] = f"{points} >= 1"
+        params = point_params + ([section_id] if section_id else [])
+        base = "FROM ws_products p LEFT JOIN ws_sections s ON s.id = p.section_id WHERE " + " AND ".join(where)
+        total = conn.execute("SELECT COUNT(*) " + base, params).fetchone()[0]
+        order, order_params, approximate = f"{points} DESC, p.name_key", point_params, bool(total)
     per_page = max(10, min(per_page, 100))
     pages = max(1, -(-total // per_page))
     page = max(1, min(page, pages))
     rows = [
         dict(r)
         for r in conn.execute(
-            "SELECT p.*, s.name AS section_name " + base + " ORDER BY s.sort_order, s.name, p.name_key LIMIT ? OFFSET ?",
-            params + [per_page, (page - 1) * per_page],
+            "SELECT p.*, s.name AS section_name " + base + f" ORDER BY {order} LIMIT ? OFFSET ?",
+            params + order_params + [per_page, (page - 1) * per_page],
         )
     ]
     pids = [r["id"] for r in rows]
@@ -264,7 +282,27 @@ def catalog(conn: sqlite3.Connection, customer_id: int, q: str = "", section_id:
             "image_url": (image if image.startswith("http") else f"/api/wholesale/images/{image}") if image else "",
             "units": units,
         })
-    return {"items": items, "total": total, "page": page, "pages": pages}
+    return {"items": items, "total": total, "page": page, "pages": pages, "approximate": approximate}
+
+
+def home_sections(conn: sqlite3.Connection, customer_id: Optional[int], limit: int = 12, per_section: int = 4) -> List[Dict[str, Any]]:
+    """The storefront: each section with a few of its products, pictures first.
+
+    Same prices and same hidden fields as catalog(); each sample carries its first sold unit's price.
+    """
+    out = []
+    for section in trader_sections(conn)[:limit]:
+        items = catalog(conn, customer_id, section_id=section["id"], per_page=12)["items"]
+        if not items:
+            continue
+        items.sort(key=lambda i: not i["image_url"])
+        samples = []
+        for item in items[:per_section]:
+            unit = next(u for u in UNITS if item["units"][u])
+            samples.append({"id": item["id"], "name": item["name"], "image_url": item["image_url"],
+                            "unit": unit, "price": item["units"][unit]["price"]})
+        out.append({"id": section["id"], "name": section["name"], "products": section["products"], "items": samples})
+    return out
 
 
 def trader_sections(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
@@ -811,7 +849,8 @@ def customer_shortages(conn: sqlite3.Connection, customer_id: int) -> List[Dict[
     rows = [
         dict(r)
         for r in conn.execute(
-            "SELECT * FROM ws_shortages WHERE customer_id = ? AND status IN ('waiting', 'available') ORDER BY status = 'available' DESC, id DESC LIMIT 200",
+            "SELECT * FROM ws_shortages WHERE customer_id = ? AND (status = 'waiting' OR (status = 'available' AND source != 'request')) "
+            "ORDER BY status = 'available' DESC, id DESC LIMIT 200",
             (customer_id,),
         )
     ]
@@ -942,7 +981,13 @@ def mark_available(conn: sqlite3.Connection, product_id: int) -> int:
     return len({r["customer_id"] for r in rows})
 
 
-def close_request(conn: sqlite3.Connection, shortage_id: int, product_id: Optional[int], message: str = "") -> None:
+def close_request(conn: sqlite3.Connection, shortage_id: int, product_id: Optional[int], message: str = "") -> int:
+    """Answer a provision request. Returns how many traders were told.
+
+    Linking to a product answers every waiting request with the same name (any trader, any unit):
+    the same words mean the same item. The answered requests leave the traders' shortages lists and
+    notebooks; the notification takes them to the product.
+    """
     row = conn.execute("SELECT * FROM ws_shortages WHERE id = ? AND product_id IS NULL", (shortage_id,)).fetchone()
     if not row:
         raise WholesaleError("طلب التوفير مش موجود.", 404)
@@ -951,12 +996,26 @@ def close_request(conn: sqlite3.Connection, shortage_id: int, product_id: Option
         product = conn.execute("SELECT name FROM ws_products WHERE id = ?", (product_id,)).fetchone()
         if not product:
             raise WholesaleError("الصنف مش موجود.", 404)
-        conn.execute("UPDATE ws_shortages SET status = 'available', product_id = ?, notified_at = ? WHERE id = ?", (product_id, now, shortage_id))
-        notify(conn, row["customer_id"], "available", f"«{product['name']}» بقى متوفر", "الصنف اللي طلبت توفيره موجود دلوقتي.", product_id=product_id)
+        key = normalize_name(row["name"])
+        same = [
+            r for r in conn.execute(
+                "SELECT id, customer_id, name FROM ws_shortages WHERE source = 'request' AND status = 'waiting' AND product_id IS NULL"
+            )
+            if r["id"] == shortage_id or normalize_name(r["name"]) == key
+        ]
+        told = set()
+        for r in same:
+            conn.execute("UPDATE ws_shortages SET status = 'available', product_id = ?, notified_at = ? WHERE id = ?", (product_id, now, r["id"]))
+            if r["customer_id"] not in told:
+                told.add(r["customer_id"])
+                notify(conn, r["customer_id"], "available", f"«{product['name']}» بقى متوفر",
+                       f"الصنف اللي طلبت توفيره («{r['name']}») موجود دلوقتي في الجملة.", product_id=product_id)
+        return len(told)
     else:
         conn.execute("UPDATE ws_shortages SET status = 'closed', notified_at = ? WHERE id = ?", (now, shortage_id))
         if message:
             notify(conn, row["customer_id"], "request", f"بخصوص طلب توفير «{row['name']}»", clean_text(message, 400))
+        return 1 if message else 0
 
 
 # ------------------------------------------------------------- notifications

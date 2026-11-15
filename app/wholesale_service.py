@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .db import utc_now
 from .wholesale_excel import SheetError, read_sheet_file
+from . import wholesale_search as wsearch
 from .wholesale_pricing import (
     UNITS,
     default_tier,
@@ -256,6 +257,14 @@ FIELDS: List[Tuple[str, str]] = [
     ("pieces_per_carton", "عدد القطع في الكرتونة"),
 ]
 FIELD_KEYS = [key for key, _ in FIELDS]
+
+# The downloadable example sheet on the upload page. Any supplier sheet works; this one is just the easiest.
+SAMPLE_SHEET: List[List[Any]] = [
+    ["الكود", "اسم الصنف", "القسم", "سعر القطعة", "سعر الدستة", "سعر الكرتونة", "عدد القطع في الكرتونة"],
+    ["A100", "عصير مانجا 250 مل", "مشروبات", 10, 115, 1300, 144],
+    ["A101", "بسكويت شوكولاتة", "حلويات", 5, 55, None, None],
+    ["A102", "زيت عباد الشمس 1 لتر", "زيوت", 65, None, 1500, 24],
+]
 PRICE_FIELDS = ("price_piece", "price_dozen", "price_carton")
 
 _GUESS_RULES: List[Tuple[str, List[str]]] = [
@@ -323,6 +332,8 @@ def _template_header_row(template: Dict[str, Any], rows: List[List[str]]) -> int
         hits = len(wanted & {normalize_name(c) for c in row if c})
         if hits > best_hits:
             best, best_hits = number, hits
+    if wanted and not best_hits:
+        return _detect_header_row(rows)  # none of the saved headers: a new layout, find its header row afresh
     return best
 
 
@@ -336,17 +347,33 @@ def _template(conn: sqlite3.Connection, supplier_id: int) -> Optional[Dict[str, 
 
 
 def _mapping_from_template(template: Dict[str, Any], headers: List[str]) -> Dict[str, Optional[int]]:
-    """Re-locate saved columns by header text first, then by position."""
+    """Re-locate saved columns by header text; guess the rest from their headers.
+
+    A saved column is only reused by position when it was saved without a header. If the supplier
+    changed the layout so that no saved header is left, the sheet is read afresh like a first upload,
+    so a moved price column never lands on the wrong data.
+    """
     mapping: Dict[str, Optional[int]] = {key: None for key in FIELD_KEYS}
     keys = [normalize_name(h) for h in headers]
+    had_headers, hits = False, 0
     for field, saved in (template.get("mapping") or {}).items():
         if field not in mapping or not saved:
             continue
         header_key = normalize_name(saved.get("header", ""))
+        had_headers = had_headers or bool(header_key)
         if header_key and header_key in keys:
             mapping[field] = keys.index(header_key)
-        elif saved.get("index") is not None and saved["index"] < len(headers):
+            hits += 1
+        elif not header_key and saved.get("index") is not None and saved["index"] < len(headers):
             mapping[field] = int(saved["index"])
+    guessed = guess_mapping(headers)
+    if had_headers and not hits:
+        return guessed
+    used = {i for i in mapping.values() if i is not None}
+    for field, index in guessed.items():
+        if mapping[field] is None and index is not None and index not in used:
+            mapping[field] = index
+            used.add(index)
     return mapping
 
 
@@ -904,20 +931,37 @@ def list_products(
 ) -> Dict[str, Any]:
     tier = _tier(conn, tier_id)
     settings = get_settings(conn)
-    sql = "SELECT p.*, s.name AS section_name FROM ws_products p LEFT JOIN ws_sections s ON s.id = p.section_id WHERE 1 = 1"
-    params: List[Any] = []
-    if q:
-        key = normalize_name(q)
-        sql += " AND (p.name_key LIKE ? OR p.code LIKE ? OR p.id IN (SELECT product_id FROM ws_offers WHERE name_key LIKE ? OR supplier_code LIKE ?))"
-        params += [f"%{key}%", f"%{q.strip()}%", f"%{key}%", f"%{q.strip()}%"]
+    head = "SELECT p.*, s.name AS section_name FROM ws_products p LEFT JOIN ws_sections s ON s.id = p.section_id WHERE 1 = 1"
+    filters, filter_params = "", []
     if supplier_id:
-        sql += " AND p.id IN (SELECT product_id FROM ws_offers WHERE supplier_id = ? AND is_active = 1)"
-        params.append(supplier_id)
+        filters += " AND p.id IN (SELECT product_id FROM ws_offers WHERE supplier_id = ? AND is_active = 1)"
+        filter_params.append(supplier_id)
     if section_id:
-        sql += " AND p.section_id = ?"
-        params.append(section_id)
-    sql += " ORDER BY p.name_key"
-    products = [dict(row) for row in conn.execute(sql, params)]
+        filters += " AND p.section_id = ?"
+        filter_params.append(section_id)
+    terms = wsearch.query_terms(normalize_name(q)) if q else []
+    search, search_params = "", []
+    if q:
+        # Our name or the supplier's name has every word (any order, synonyms), or the code matches.
+        code = f"%{q.strip()}%"
+        if terms:
+            ours, ours_params = wsearch.all_words(terms, "p.name_key")
+            theirs, theirs_params = wsearch.all_words(terms, "name_key")
+            search = f" AND (({ours}) OR p.code LIKE ? OR p.id IN (SELECT product_id FROM ws_offers WHERE ({theirs}) OR supplier_code LIKE ?))"
+            search_params = ours_params + [code] + theirs_params + [code]
+        else:
+            search = " AND (p.code LIKE ? OR p.id IN (SELECT product_id FROM ws_offers WHERE supplier_code LIKE ?))"
+            search_params = [code, code]
+    products = [dict(row) for row in conn.execute(head + search + filters + " ORDER BY p.name_key", search_params + filter_params)]
+    approximate = False
+    if not products and len(terms) > 1:
+        # Nothing has every word: list the closest names first (e.g. a trader's request in other words).
+        points, point_params = wsearch.score(terms, "p.name_key")
+        products = [dict(row) for row in conn.execute(
+            head + f" AND {points} >= 1" + filters + f" ORDER BY {points} DESC, p.name_key",
+            point_params + filter_params + point_params,
+        )]
+        approximate = bool(products)
     ids = [p["id"] for p in products]
     offers = load_offers(conn, ids)
     tier_prices = load_tier_prices(conn, ids)
@@ -969,6 +1013,7 @@ def list_products(
         "page": page,
         "pages": max(1, -(-total // per_page)),
         "items": rows[(page - 1) * per_page: page * per_page],
+        "approximate": approximate,
     }
 
 

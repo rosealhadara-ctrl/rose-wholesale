@@ -79,6 +79,20 @@ def _public(row: Dict[str, Any]) -> Dict[str, Any]:
 # ------------------------------------------------------------ manager: staff
 
 
+TEAM_NEEDS_PLUS = "«فريقي» متاحة لمشتركين روز بلس بس."
+
+
+def require_team(conn: sqlite3.Connection, owner_id: int) -> Dict[str, Any]:
+    """An approved trader with an active Rose Plus subscription: the team works only then,
+    for the owner and for the staff (staff are let in again as soon as the owner renews)."""
+    from .wholesale_plus import active_plus
+
+    trader = require_trader(conn, owner_id)
+    if not active_plus(conn, owner_id):
+        raise WholesaleError(TEAM_NEEDS_PLUS, 403)
+    return trader
+
+
 def _staff_of(conn: sqlite3.Connection, owner_id: int, staff_id: int) -> Dict[str, Any]:
     row = conn.execute("SELECT * FROM ws_trader_staff WHERE id = ? AND owner_id = ?", (staff_id, owner_id)).fetchone()
     if not row:
@@ -87,7 +101,7 @@ def _staff_of(conn: sqlite3.Connection, owner_id: int, staff_id: int) -> Dict[st
 
 
 def list_staff(conn: sqlite3.Connection, owner_id: int) -> List[Dict[str, Any]]:
-    require_trader(conn, owner_id)
+    require_team(conn, owner_id)
     out = []
     for r in conn.execute("SELECT * FROM ws_trader_staff WHERE owner_id = ? ORDER BY is_active DESC, name", (owner_id,)):
         item = _public(dict(r))
@@ -109,7 +123,7 @@ def _perms(data: Dict[str, Any], current: Optional[Dict[str, Any]] = None) -> Di
 
 
 def add_staff(conn: sqlite3.Connection, owner_id: int, name: str, phone: str, perms: Dict[str, Any]) -> Dict[str, Any]:
-    require_trader(conn, owner_id)
+    require_team(conn, owner_id)
     name = clean_text(name, 60)
     if len(name) < 2:
         raise WholesaleError("اكتب اسم الموظف.")
@@ -131,7 +145,7 @@ def add_staff(conn: sqlite3.Connection, owner_id: int, name: str, phone: str, pe
 
 
 def update_staff(conn: sqlite3.Connection, owner_id: int, staff_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
-    require_trader(conn, owner_id)
+    require_team(conn, owner_id)
     s = _staff_of(conn, owner_id, staff_id)
     p = _perms(data, s)
     active = int(bool(data["is_active"])) if data.get("is_active") is not None else s["is_active"]
@@ -145,7 +159,7 @@ def update_staff(conn: sqlite3.Connection, owner_id: int, staff_id: int, data: D
 
 
 def reset_pin(conn: sqlite3.Connection, owner_id: int, staff_id: int) -> Dict[str, Any]:
-    require_trader(conn, owner_id)
+    require_team(conn, owner_id)
     _staff_of(conn, owner_id, staff_id)
     pin, salt = _new_pin(), secrets.token_hex(16)
     conn.execute(
@@ -178,7 +192,7 @@ def login(conn: sqlite3.Connection, phone: str, pin: str) -> str:
         conn.execute("UPDATE ws_trader_staff SET failed_attempts = ?, locked_until = ? WHERE id = ?", (0 if locked else failed, locked, s["id"]))
         conn.commit()  # keep the failed attempt: the error below rolls back the rest of the request
         raise WholesaleError("رقم الموبايل أو الكود غلط.", 401)
-    require_trader(conn, s["owner_id"])
+    require_team(conn, s["owner_id"])
     token = secrets.token_urlsafe(32)
     conn.execute("UPDATE ws_trader_staff SET failed_attempts = 0, locked_until = NULL, last_login_at = ? WHERE id = ?", (_iso(now), s["id"]))
     conn.execute("DELETE FROM ws_trader_staff_sessions WHERE expires_at < ?", (_iso(now),))
@@ -270,7 +284,7 @@ def staff_notice(conn: sqlite3.Connection, staff_id: int, title: str, body: str 
 
 def submit_request(conn: sqlite3.Connection, staff: Dict[str, Any], items: List[Dict[str, Any]], note: str = "") -> Dict[str, Any]:
     owner = staff["owner_id"]
-    require_trader(conn, owner)
+    require_team(conn, owner)
     lines = _clean_lines(conn, owner, items)
     note = clean_text(note, 300)
     now = utc_now()
@@ -348,7 +362,7 @@ def staff_notices(conn: sqlite3.Connection, staff_id: int, mark_read: bool = Fal
 
 
 def owner_requests(conn: sqlite3.Connection, owner_id: int, status: str = "pending") -> List[Dict[str, Any]]:
-    require_trader(conn, owner_id)
+    require_team(conn, owner_id)
     sql = "SELECT id FROM ws_team_requests WHERE owner_id = ?"
     params: List[Any] = [owner_id]
     if status in STATUS_LABEL:
@@ -363,7 +377,7 @@ def pending_count(conn: sqlite3.Connection, owner_id: int) -> int:
 
 def decide_request(conn: sqlite3.Connection, owner_id: int, req_id: int, approve: bool,
                    changes: Optional[List[Dict[str, Any]]] = None, manager_note: str = "") -> Dict[str, Any]:
-    require_trader(conn, owner_id)
+    require_team(conn, owner_id)
     r = conn.execute("SELECT * FROM ws_team_requests WHERE id = ? AND owner_id = ?", (req_id, owner_id)).fetchone()
     if not r:
         raise WholesaleError("الطلب مش موجود.", 404)

@@ -500,7 +500,18 @@
         <div class="card stack" style="max-width:720px">
           <label class="field"><span>المورد</span><select id="i-supplier">${options(suppliers.map((s) => ({ value: s.id, label: s.alias + (s.has_template ? ' (عنده ربط محفوظ)' : '') })), '', 'اختار المورد')}</select></label>
           <label class="dropzone" id="drop"><b>اسحب الشيت هنا أو دوس لاختياره</b><span class="small muted">xlsx أو csv، لحد 10 ميجا</span><input type="file" id="i-file" accept=".xlsx,.xlsm,.csv" hidden></label>
-        </div>` : '<div class="card empty">لازم تضيف مورد الأول. <button class="btn primary" id="to-suppliers">إضافة مورد</button></div>'}
+        </div>
+        <details class="card stack" style="max-width:720px;margin-top:12px" open>
+          <summary><b>شكل الشيت</b> <span class="small muted">مش لازم يبقى نفس الشكل كل مرة</span></summary>
+          <ul style="margin:0;padding-inline-start:20px">
+            <li>ارفع شيت المورد زي ما هو. البرنامج بيتعرّف على الأعمدة لوحده من عناوينها، وفي الخطوة ٢ تقدر تصلّح أي عمود اتربط غلط.</li>
+            <li><b>لازم يكون فيه:</b> عمود <b>اسم الصنف</b>، وعمود سعر واحد على الأقل (قطعة أو دستة أو كرتونة).</li>
+            <li><b>اختياري:</b> الكود، والقسم، وعدد القطع في الدستة، وعدد القطع في الكرتونة. لو فيه سعر كرتونة، حط عدد القطع اللي جواها علشان سعر القطعة يتحسب.</li>
+            <li>أول مرة ترفع لمورد، الربط بيتحفظ. المرة الجاية لنفس المورد الأعمدة بتترتب لوحدها، حتى لو اتغيّر ترتيبها، طالما العناوين زي ما هي.</li>
+            <li>الأسعار في الشيت هي <b>أسعار الشراء</b>. سعر البيع بيتحسب بالهامش.</li>
+          </ul>
+          <a class="btn" href="/api/admin/wholesale/imports/sample.xlsx" download style="justify-self:start">نزّل شيت نموذج (Excel)</a>
+        </details>` : '<div class="card empty">لازم تضيف مورد الأول. <button class="btn primary" id="to-suppliers">إضافة مورد</button></div>'}
       </div>
       <h3 style="margin:28px 0 10px">آخر الشيتات اللي اتحفظت</h3>
       <div id="imp-history"><p class="muted">بيحمّل…</p></div>`;
@@ -874,7 +885,7 @@
     const w = window.open('', '_blank');
     if (!w) { toast('المتصفح منع فتح نافذة الطباعة', true); return; }
     w.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>طلب شراء ${esc(po.number)}</title>
-      <style>body{font-family:Tahoma,Arial,sans-serif;padding:24px;color:#222}h1{font-size:20px;margin:0 0 4px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #ccc;padding:8px;text-align:right;font-size:14px}th{background:#f4eeee}.muted{color:#666;font-size:13px}</style></head><body>
+      <style>body{font-family:Tahoma,Arial,sans-serif;padding:24px;color:#222}h1{font-size:20px;margin:0 0 4px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #ccc;padding:8px;text-align:right;font-size:14px}th{background:#eef1f5}.muted{color:#666;font-size:13px}</style></head><body>
       <h1>طلب شراء ${esc(po.number)}</h1><div class="muted">روز · ${dateText(d.created_at)}</div>
       <table><thead><tr><th>#</th><th>الصنف</th><th>الكود</th><th>الكمية</th><th>الوحدة</th><th>ملاحظة</th><th>متوفر؟</th></tr></thead><tbody>
       ${po.items.map((i, n) => `<tr><td>${n + 1}</td><td>${esc(i.supplier_item_name || i.name)}</td><td>${esc(i.supplier_code)}</td><td>${i.qty}</td><td>${UNIT_NAME[i.unit]}</td><td>${esc(i.note)}</td><td></td></tr>`).join('')}
@@ -1082,16 +1093,26 @@
         if (message == null) return;
         run(e.target, async () => { await api('POST', `${API}/shortages/${rid}/close`, { message }); toast('اتقفل'); await loadSummary(); loadShortages(); });
       };
+      // Search with the trader's own words first (the search knows iphone = ابل, سماعات = سماعة),
+      // show the closest products, and let the admin pick one by number or try other words.
       tr.querySelector('[data-link]').onclick = (e) => {
-        const q = prompt('اكتب اسم الصنف عندك علشان نربطه:', tr.querySelector('b').textContent);
-        if (!q) return;
         run(e.target, async () => {
-          const found = (await api('GET', `${API}/products?${qs({ q })}`)).items.filter((i) => i.available);
-          if (!found.length) throw new Error('مفيش صنف متاح بالاسم ده. ضيفه الأول من الأصناف.');
-          const pick = found.length === 1 ? found[0] : found[Number(prompt(found.slice(0, 9).map((f, n) => `${n + 1}. ${f.name}`).join('\n') + '\n\nاكتب رقم الصنف:', '1')) - 1];
-          if (!pick) return;
-          await api('POST', `${API}/shortages/${rid}/close`, { product_id: pick.id });
-          toast(`اتربط بـ «${pick.name}» والتاجر اتبلّغ`);
+          let q = tr.querySelector('b').textContent.trim();
+          let pick = null;
+          while (!pick) {
+            const res = await api('GET', `${API}/products?${qs({ q })}`);
+            const found = res.items.filter((i) => i.available).slice(0, 9);
+            const head = !found.length ? `مفيش صنف متاح قريب من «${q}».`
+              : res.approximate ? `مفيش صنف فيه «${q}» بالظبط. دي أقرب الأصناف:` : `الأصناف اللي لقيناها لـ«${q}»:`;
+            const list = found.map((f, n) => `${n + 1}. ${f.name}`).join('\n');
+            const answer = prompt(`${head}\n${list}\n\n${found.length ? 'اكتب رقم الصنف، أو ' : ''}اكتب اسم تاني ندوّر بيه:`, found.length ? '1' : '');
+            if (answer == null || !answer.trim()) return;
+            const n = Number(answer.trim().replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
+            if (Number.isInteger(n) && n >= 1 && n <= found.length) pick = found[n - 1];
+            else q = answer.trim();
+          }
+          const done = await api('POST', `${API}/shortages/${rid}/close`, { product_id: pick.id });
+          toast(`اتربط بـ «${pick.name}» واتبلّغ ${done.notified || 1} تاجر`);
           await loadSummary();
           loadShortages();
         });
@@ -1760,12 +1781,12 @@
       <div class="ws-section-head"><div><h2>التقييمات</h2><p>تقييم عام لتجربة التاجر بعد ما يستلم، وبيوصلك إنت بس.</p></div></div>
       <div class="grid-2">
         <section class="card stack"><div class="row"><b style="font-size:40px" class="num">${d.average == null ? '—' : d.average}</b><span class="muted">من 5 · ${d.count} تقييم</span></div>
-          ${[5, 4, 3, 2, 1].map((n) => `<div class="row" style="gap:8px"><span class="num" style="width:16px">${n}</span><div style="flex:1;background:#EFE9E7;border-radius:6px;height:12px"><div style="width:${(d.distribution[n] / max) * 100}%;background:#C98A2E;height:12px;border-radius:6px"></div></div><span class="num small" style="width:28px">${d.distribution[n]}</span></div>`).join('')}
+          ${[5, 4, 3, 2, 1].map((n) => `<div class="row" style="gap:8px"><span class="num" style="width:16px">${n}</span><div style="flex:1;background:#ECEEF2;border-radius:6px;height:12px"><div style="width:${(d.distribution[n] / max) * 100}%;background:#C98A2E;height:12px;border-radius:6px"></div></div><span class="num small" style="width:28px">${d.distribution[n]}</span></div>`).join('')}
         </section>
         <section class="card"><h3 style="margin-bottom:8px">اللي عجب التجار</h3>${d.liked.length ? d.liked.map(([k, n]) => `<div class="row" style="padding:4px 0;border-bottom:1px solid var(--line)"><span style="flex:1">${esc(k)}</span><b class="num">${n}</b></div>`).join('') : '<p class="muted">لسه مفيش.</p>'}</section>
       </div>
       <section class="card" style="margin-top:16px">${d.items.length ? `<div class="table-wrap"><table><thead><tr><th>التاجر</th><th>الطلب</th><th>التقييم</th><th>عجبه</th><th>عايزنا نحسّن</th><th>الوقت</th></tr></thead><tbody>
-        ${d.items.map((r) => `<tr><td>${esc(r.shop_name || r.name)}</td><td class="num">${r.order_number}</td><td style="color:#C98A2E;white-space:nowrap">${'★'.repeat(r.stars)}<span style="color:#D9CDCA">${'★'.repeat(5 - r.stars)}</span></td><td class="small">${r.liked.map(esc).join('، ')}</td><td class="small">${esc(r.improve)}</td><td class="small">${dateText(r.created_at)}</td></tr>`).join('')}
+        ${d.items.map((r) => `<tr><td>${esc(r.shop_name || r.name)}</td><td class="num">${r.order_number}</td><td style="color:#C98A2E;white-space:nowrap">${'★'.repeat(r.stars)}<span style="color:#CDD3DD">${'★'.repeat(5 - r.stars)}</span></td><td class="small">${r.liked.map(esc).join('، ')}</td><td class="small">${esc(r.improve)}</td><td class="small">${dateText(r.created_at)}</td></tr>`).join('')}
       </tbody></table></div>` : '<p class="muted">لسه مفيش تقييمات.</p>'}</section>`;
   }
 
