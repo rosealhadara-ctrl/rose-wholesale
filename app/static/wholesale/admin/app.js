@@ -1093,14 +1093,24 @@
         if (message == null) return;
         run(e.target, async () => { await api('POST', `${API}/shortages/${rid}/close`, { message }); toast('اتقفل'); await loadSummary(); loadShortages(); });
       };
+      // Search with the trader's own words first (the search knows iphone = ابل, سماعات = سماعة),
+      // show the closest products, and let the admin pick one by number or try other words.
       tr.querySelector('[data-link]').onclick = (e) => {
-        const q = prompt('اكتب اسم الصنف عندك علشان نربطه:', tr.querySelector('b').textContent);
-        if (!q) return;
         run(e.target, async () => {
-          const found = (await api('GET', `${API}/products?${qs({ q })}`)).items.filter((i) => i.available);
-          if (!found.length) throw new Error('مفيش صنف متاح بالاسم ده. ضيفه الأول من الأصناف.');
-          const pick = found.length === 1 ? found[0] : found[Number(prompt(found.slice(0, 9).map((f, n) => `${n + 1}. ${f.name}`).join('\n') + '\n\nاكتب رقم الصنف:', '1')) - 1];
-          if (!pick) return;
+          let q = tr.querySelector('b').textContent.trim();
+          let pick = null;
+          while (!pick) {
+            const res = await api('GET', `${API}/products?${qs({ q })}`);
+            const found = res.items.filter((i) => i.available).slice(0, 9);
+            const head = !found.length ? `مفيش صنف متاح قريب من «${q}».`
+              : res.approximate ? `مفيش صنف فيه «${q}» بالظبط. دي أقرب الأصناف:` : `الأصناف اللي لقيناها لـ«${q}»:`;
+            const list = found.map((f, n) => `${n + 1}. ${f.name}`).join('\n');
+            const answer = prompt(`${head}\n${list}\n\n${found.length ? 'اكتب رقم الصنف، أو ' : ''}اكتب اسم تاني ندوّر بيه:`, found.length ? '1' : '');
+            if (answer == null || !answer.trim()) return;
+            const n = Number(answer.trim().replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
+            if (Number.isInteger(n) && n >= 1 && n <= found.length) pick = found[n - 1];
+            else q = answer.trim();
+          }
           await api('POST', `${API}/shortages/${rid}/close`, { product_id: pick.id });
           toast(`اتربط بـ «${pick.name}» والتاجر اتبلّغ`);
           await loadSummary();

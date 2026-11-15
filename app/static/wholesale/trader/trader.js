@@ -392,9 +392,16 @@
     const section = (state.me.sections || []).find((s) => String(s.id) === String(state.section));
     const title = state.q ? `نتايج «${esc(state.q)}»` : section ? esc(section.name) : 'كل الأصناف';
     const range = `${int(data.total)} صنف${data.pages > 1 ? ` · صفحة ${int(data.page)} من ${int(data.pages)}` : ''}`;
-    box.innerHTML = data.total ? `<div class="results-bar"><h2>${title}</h2><span class="muted small">${range}</span>${state.q ? '<button class="btn ghost sm" id="clear-q">امسح البحث</button>' : ''}</div>` : '';
+    // Nothing had every word: say these are only the closest names, and keep the way to ask for the exact item.
+    const approved = state.me.trader_status === 'approved';
+    const near = data.approximate && state.q
+      ? `<div class="alert info" style="margin-bottom:12px">مش لاقيين «${esc(state.q)}» بالظبط. دي أقرب حاجات عندنا.${approved ? ' <button class="btn ghost sm" id="near-request">مش لاقي اللي عايزه؟ اطلب توفيره</button>' : ''}</div>`
+      : '';
+    box.innerHTML = data.total ? `${near}<div class="results-bar"><h2>${data.approximate ? 'أقرب النتايج' : title}</h2><span class="muted small">${range}</span>${state.q ? '<button class="btn ghost sm" id="clear-q">امسح البحث</button>' : ''}</div>` : '';
     const clear = document.getElementById('clear-q');
     if (clear) clear.onclick = () => { state.q = ''; state.page = 1; document.getElementById('search').value = ''; loadCatalog(); };
+    const ask = document.getElementById('near-request');
+    if (ask) ask.onclick = () => { sessionStorage.setItem('ws-request', state.q); location.hash = '#shortages'; };
   }
 
   async function loadCatalog() {

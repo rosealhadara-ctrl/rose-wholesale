@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .db import utc_now
 from .wholesale_excel import SheetError, read_sheet_file
+from . import wholesale_search as wsearch
 from .wholesale_pricing import (
     UNITS,
     default_tier,
@@ -930,20 +931,37 @@ def list_products(
 ) -> Dict[str, Any]:
     tier = _tier(conn, tier_id)
     settings = get_settings(conn)
-    sql = "SELECT p.*, s.name AS section_name FROM ws_products p LEFT JOIN ws_sections s ON s.id = p.section_id WHERE 1 = 1"
-    params: List[Any] = []
-    if q:
-        key = normalize_name(q)
-        sql += " AND (p.name_key LIKE ? OR p.code LIKE ? OR p.id IN (SELECT product_id FROM ws_offers WHERE name_key LIKE ? OR supplier_code LIKE ?))"
-        params += [f"%{key}%", f"%{q.strip()}%", f"%{key}%", f"%{q.strip()}%"]
+    head = "SELECT p.*, s.name AS section_name FROM ws_products p LEFT JOIN ws_sections s ON s.id = p.section_id WHERE 1 = 1"
+    filters, filter_params = "", []
     if supplier_id:
-        sql += " AND p.id IN (SELECT product_id FROM ws_offers WHERE supplier_id = ? AND is_active = 1)"
-        params.append(supplier_id)
+        filters += " AND p.id IN (SELECT product_id FROM ws_offers WHERE supplier_id = ? AND is_active = 1)"
+        filter_params.append(supplier_id)
     if section_id:
-        sql += " AND p.section_id = ?"
-        params.append(section_id)
-    sql += " ORDER BY p.name_key"
-    products = [dict(row) for row in conn.execute(sql, params)]
+        filters += " AND p.section_id = ?"
+        filter_params.append(section_id)
+    terms = wsearch.query_terms(normalize_name(q)) if q else []
+    search, search_params = "", []
+    if q:
+        # Our name or the supplier's name has every word (any order, synonyms), or the code matches.
+        code = f"%{q.strip()}%"
+        if terms:
+            ours, ours_params = wsearch.all_words(terms, "p.name_key")
+            theirs, theirs_params = wsearch.all_words(terms, "name_key")
+            search = f" AND (({ours}) OR p.code LIKE ? OR p.id IN (SELECT product_id FROM ws_offers WHERE ({theirs}) OR supplier_code LIKE ?))"
+            search_params = ours_params + [code] + theirs_params + [code]
+        else:
+            search = " AND (p.code LIKE ? OR p.id IN (SELECT product_id FROM ws_offers WHERE supplier_code LIKE ?))"
+            search_params = [code, code]
+    products = [dict(row) for row in conn.execute(head + search + filters + " ORDER BY p.name_key", search_params + filter_params)]
+    approximate = False
+    if not products and len(terms) > 1:
+        # Nothing has every word: list the closest names first (e.g. a trader's request in other words).
+        points, point_params = wsearch.score(terms, "p.name_key")
+        products = [dict(row) for row in conn.execute(
+            head + f" AND {points} >= 1" + filters + f" ORDER BY {points} DESC, p.name_key",
+            point_params + filter_params + point_params,
+        )]
+        approximate = bool(products)
     ids = [p["id"] for p in products]
     offers = load_offers(conn, ids)
     tier_prices = load_tier_prices(conn, ids)
@@ -995,6 +1013,7 @@ def list_products(
         "page": page,
         "pages": max(1, -(-total // per_page)),
         "items": rows[(page - 1) * per_page: page * per_page],
+        "approximate": approximate,
     }
 
 

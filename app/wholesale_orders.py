@@ -32,6 +32,7 @@ from .wholesale_pricing import (
     tier_for_customer,
 )
 from .wholesale_service import WholesaleError, clean_text, normalize_name
+from . import wholesale_search as wsearch
 from . import wholesale_payments as wp
 
 SUFFIXES = "أبجدهوزحطيكلمنسعفصقرشتثخذضظغ"
@@ -217,10 +218,16 @@ def catalog(conn: sqlite3.Connection, customer_id: Optional[int], q: str = "", s
         "WHERE o.product_id = p.id AND o.is_active = 1 AND s.is_active = 1)",
     ]
     params: List[Any] = []
+    terms = wsearch.query_terms(normalize_name(q)) if q else []
+    q_at = len(where)  # position of the search condition, swapped below for the "closest" search
     if q:
-        key = normalize_name(q)
-        where.append("(p.name_key LIKE ? OR p.code LIKE ?)")
-        params += [f"%{key}%", f"%{q.strip()}%"]
+        if terms:
+            words, word_params = wsearch.all_words(terms, "p.name_key")
+            where.append(f"(({words}) OR p.code LIKE ?)")
+            params += word_params + [f"%{q.strip()}%"]
+        else:
+            where.append("p.code LIKE ?")
+            params.append(f"%{q.strip()}%")
     if section_id:
         where.append("p.section_id = ?")
         params.append(section_id)
@@ -231,14 +238,23 @@ def catalog(conn: sqlite3.Connection, customer_id: Optional[int], q: str = "", s
         params += list(ids)
     base = "FROM ws_products p LEFT JOIN ws_sections s ON s.id = p.section_id WHERE " + " AND ".join(where)
     total = conn.execute("SELECT COUNT(*) " + base, params).fetchone()[0]
+    order, order_params, approximate = "s.sort_order, s.name, p.name_key", [], False
+    if not total and len(terms) > 1 and ids is None:
+        # Nothing has every word: show the closest names (most words in common) instead of nothing.
+        points, point_params = wsearch.score(terms, "p.name_key")
+        where[q_at] = f"{points} >= 1"
+        params = point_params + ([section_id] if section_id else [])
+        base = "FROM ws_products p LEFT JOIN ws_sections s ON s.id = p.section_id WHERE " + " AND ".join(where)
+        total = conn.execute("SELECT COUNT(*) " + base, params).fetchone()[0]
+        order, order_params, approximate = f"{points} DESC, p.name_key", point_params, bool(total)
     per_page = max(10, min(per_page, 100))
     pages = max(1, -(-total // per_page))
     page = max(1, min(page, pages))
     rows = [
         dict(r)
         for r in conn.execute(
-            "SELECT p.*, s.name AS section_name " + base + " ORDER BY s.sort_order, s.name, p.name_key LIMIT ? OFFSET ?",
-            params + [per_page, (page - 1) * per_page],
+            "SELECT p.*, s.name AS section_name " + base + f" ORDER BY {order} LIMIT ? OFFSET ?",
+            params + order_params + [per_page, (page - 1) * per_page],
         )
     ]
     pids = [r["id"] for r in rows]
@@ -266,7 +282,7 @@ def catalog(conn: sqlite3.Connection, customer_id: Optional[int], q: str = "", s
             "image_url": (image if image.startswith("http") else f"/api/wholesale/images/{image}") if image else "",
             "units": units,
         })
-    return {"items": items, "total": total, "page": page, "pages": pages}
+    return {"items": items, "total": total, "page": page, "pages": pages, "approximate": approximate}
 
 
 def home_sections(conn: sqlite3.Connection, customer_id: Optional[int], limit: int = 12, per_section: int = 4) -> List[Dict[str, Any]]:
