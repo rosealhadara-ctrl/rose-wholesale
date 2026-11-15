@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
-  <link rel="stylesheet" href="/static/wholesale/trader/trader.css?v=15">
-  <script src="/static/wholesale/trader/trader.js?v=22" defer></script>
+  <link rel="stylesheet" href="/static/wholesale/trader/trader.css?v=17">
+  <script src="/static/wholesale/trader/trader.js?v=24" defer></script>
   <script src="/static/wholesale/pw-toggle.js?v=2" defer></script>
 </head>
 <body>
@@ -19,6 +19,10 @@
       <a class="brand" href="#catalog">
         <span class="logo"><img src="/api/branding/logo" alt="روز" onerror="this.src='/static/icon.svg'"></span>
         <span><b>روز جملة</b><small id="shop-name"></small></span>
+      </a>
+      <a class="deliver-to" id="deliver-to" href="#login" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.3"/></svg>
+        <span><small>التوصيل إلى</small><b id="deliver-area">حدد عنوانك</b></span>
       </a>
       <form class="search-row" id="search-row" role="search" hidden>
         <input type="search" id="search" placeholder="دوّر على صنف" aria-label="دوّر على صنف" enterkeyhint="search">
@@ -35,10 +39,12 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4V5Z"/><path d="M8 9h8M8 12h5"/></svg>
         <span class="dot" id="top-chat-count" hidden></span>
       </button>
-      <button class="icon-btn cart-btn" id="top-cart" aria-label="السلة" hidden>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.4 11h10.2L20 7H6.2"/><circle cx="9" cy="19.5" r="1.5"/><circle cx="17" cy="19.5" r="1.5"/></svg>
-        <span class="cart-label" aria-hidden="true">السلة</span>
-        <span class="dot" id="top-cart-count" hidden></span>
+      <button class="cart-top" id="top-cart" aria-label="السلة" hidden>
+        <span class="cart-icon">
+          <svg viewBox="0 0 40 32" aria-hidden="true"><path d="M2 4h5l4.5 18h20l4-13H9.2"/><circle cx="14" cy="27.5" r="2.2"/><circle cx="28.5" cy="27.5" r="2.2"/></svg>
+          <span class="cart-count num" id="top-cart-count">0</span>
+        </span>
+        <span class="cart-word">السلة</span>
       </button>
       </span>
     </div>

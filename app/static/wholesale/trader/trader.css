@@ -42,6 +42,14 @@ a { color: var(--accent); }
 /* Amazon-style search: one white field with a coloured button joined to it.
    Phones: under the logo row. Wider screens: between the logo and the icons. */
 .top-actions { order: 2; }
+/* "التوصيل إلى": a thin line under the search on phones, next to the logo on wider screens */
+.deliver-to { order: 4; flex: 1 1 100%; display: flex; align-items: center; gap: 4px; min-height: 32px; padding: 2px 6px; margin-top: -4px; border: 1px solid transparent; border-radius: 6px; color: #fff; text-decoration: none; min-width: 0; }
+.deliver-to:hover { border-color: rgba(255,255,255,.7); }
+.deliver-to:focus-visible { outline: 2px solid var(--pink); outline-offset: 1px; }
+.deliver-to svg { flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+.deliver-to span { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.deliver-to small { color: #DCE3F0; font-size: 12px; white-space: nowrap; }
+.deliver-to b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60vw; }
 .search-row { order: 3; flex: 1 1 100%; display: flex; min-width: 0; border-radius: 10px; overflow: hidden; background: #fff; }
 .search-row:focus-within { outline: 3px solid var(--pink); }
 .search-row input { flex: 1; min-width: 0; min-height: 46px; border: 0; border-radius: 0; padding: 10px 14px; background: #fff; color: var(--ink); }
@@ -50,11 +58,24 @@ a { color: var(--accent); }
 .search-row button:active { background: #E67A00; }
 .search-row svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
 .cart-label { display: none; }
+/* Amazon-style cart: big outline cart, the count in orange on the basket, the word beside it */
+.cart-top { position: relative; display: flex; align-items: flex-end; gap: 2px; min-height: 44px; padding: 2px 6px 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #fff; cursor: pointer; }
+.cart-top:hover { border-color: rgba(255,255,255,.7); }
+.cart-top:focus-visible { outline: 2px solid var(--pink); outline-offset: 1px; }
+.cart-icon { position: relative; display: block; width: 46px; height: 36px; }
+.cart-icon svg { width: 46px; height: 36px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.cart-count { position: absolute; top: -3px; left: 57%; transform: translateX(-50%); color: var(--pink); font-weight: 700; font-size: 17px; line-height: 1; }
+.cart-word { display: none; font-weight: 700; font-size: 15px; line-height: 1.1; padding-bottom: 3px; }
 @media (min-width: 720px) {
   .search-row { order: 2; flex: 1 1 auto; max-width: 760px; }
+  .deliver-to { order: 1; flex: 0 1 auto; margin-top: 0; min-height: 44px; }
+  .deliver-to span { display: block; }
+  .deliver-to small, .deliver-to b { display: block; line-height: 1.2; }
+  .deliver-to b { max-width: 150px; }
   .top-actions { order: 3; }
   .cart-btn { width: auto; display: flex; gap: 6px; padding: 0 12px; }
   .cart-label { display: inline; font-weight: 700; font-size: 14px; }
+  .cart-word { display: inline; }
 }
 
 /* department strip */
