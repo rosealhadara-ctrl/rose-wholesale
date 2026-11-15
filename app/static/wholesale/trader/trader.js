@@ -78,9 +78,10 @@
     const show = state.me && cart.length && !['cart', 'done', 'login', 'signup'].includes(currentRoute().name);
     document.getElementById('cart-bar').hidden = !show;
     document.getElementById('cart-bar-text').textContent = `${int(cart.length)} صنف · ${money(cartTotal())}`;
-    const dot = document.getElementById('top-cart-count');
-    dot.hidden = !cart.length;
-    dot.textContent = int(cart.length);
+    // Shown even when empty, like a shop's cart: 0, 1, 2 … (99+ past that).
+    const count = document.getElementById('top-cart-count');
+    count.textContent = cart.length > 99 ? '99+' : int(cart.length);
+    document.getElementById('top-cart').setAttribute('aria-label', `السلة، ${int(cart.length)} صنف`);
   }
   document.getElementById('open-cart').onclick = () => { location.hash = '#cart'; };
   document.getElementById('top-cart').onclick = () => { location.hash = '#cart'; };
@@ -124,6 +125,7 @@
     document.getElementById('top-account-label').textContent = state.me.logged_in ? 'حسابي' : 'الحساب';
     state.home = null; // prices follow the account's tier, so reload the storefront rows
     drawCatBar();
+    drawDeliverTo();
     const n = state.me.unread || 0;
     const badge = document.getElementById('notif-count');
     badge.hidden = !n;
@@ -134,6 +136,18 @@
     chatBtn.hidden = !approved || !SOCIAL;
     document.getElementById('top-chat-count').hidden = !state.me.chat_unread;
     document.getElementById('top-chat-count').textContent = state.me.chat_unread > 99 ? '99+' : int(state.me.chat_unread || 0);
+  }
+
+  // Amazon-style "التوصيل إلى <area>" in the header. Visitors are asked to sign in so we know where to deliver.
+  function drawDeliverTo() {
+    const link = document.getElementById('deliver-to');
+    const me = state.me;
+    link.hidden = false;
+    const place = me.logged_in ? (me.area || me.address || '') : '';
+    document.getElementById('deliver-area').textContent = place || (me.logged_in ? 'ضيف عنوانك' : 'حدد عنوانك');
+    link.href = me.logged_in ? '#account' : '#login';
+    link.setAttribute('aria-label', place ? `التوصيل إلى ${place}، غيّر العنوان` : 'حدد عنوان التوصيل');
+    link.onclick = () => { if (me.logged_in) sessionStorage.setItem('ws-focus-addr', '1'); };
   }
 
   let routeSeq = 0;
@@ -1421,9 +1435,16 @@
       if (!box || !list.length) return;
       box.innerHTML = list.map((f) => `<div class="notice" style="margin-top:8px"><b>${f.kind === 'complaint' ? 'شكوى' : 'اقتراح'}${f.order_number ? ` · طلب ${f.order_number}` : ''} <span class="status ${f.status === 'resolved' ? 'done' : 'open'}">${f.status === 'resolved' ? 'اتحلّت' : 'مفتوحة'}</span></b><span class="small">${esc(f.text)}</span>${f.reply ? `<span class="alert good small">ردّنا: ${esc(f.reply)}</span>` : ''}<time>${when(f.created_at)}</time></div>`).join('');
     }).catch(() => {});
+    if (sessionStorage.getItem('ws-focus-addr')) {
+      sessionStorage.removeItem('ws-focus-addr');
+      const addr = document.getElementById('addr');
+      addr.scrollIntoView({ block: 'center' });
+      addr.focus({ preventScroll: true });
+    }
     document.getElementById('addr-save').onclick = (e) => run(e.target, async () => {
       await api('PUT', '/api/wholesale/address', { address: document.getElementById('addr').value.trim() });
       state.me.address = document.getElementById('addr').value.trim();
+      drawDeliverTo();
       toast('العنوان اتحفظ');
     });
     view.querySelectorAll('[data-redeem]').forEach((b) => (b.onclick = () => {
