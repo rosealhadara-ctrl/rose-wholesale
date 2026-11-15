@@ -195,6 +195,9 @@ label.field { display: grid; gap: 6px; font-weight: 500; font-size: 14px; }
 .add-btn:active { background: #E67A00; }
 .seg { display: flex; background: var(--bg); border-radius: 12px; padding: 4px; gap: 4px; }
 .seg button { flex: 1; border: 0; background: transparent; border-radius: 9px; min-height: 40px; cursor: pointer; color: var(--muted); font-weight: 600; }
+.line .row { flex-wrap: wrap; }
+.line-units { padding: 3px; }
+.line-units button { flex: none; min-height: 40px; padding: 0 12px; font-size: 13px; }
 .seg button[aria-pressed="true"] { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(30,42,68,.15); }
 .price-line { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .price { font-size: 22px; font-weight: 700; }

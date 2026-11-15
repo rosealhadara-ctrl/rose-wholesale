@@ -849,7 +849,8 @@ def customer_shortages(conn: sqlite3.Connection, customer_id: int) -> List[Dict[
     rows = [
         dict(r)
         for r in conn.execute(
-            "SELECT * FROM ws_shortages WHERE customer_id = ? AND status IN ('waiting', 'available') ORDER BY status = 'available' DESC, id DESC LIMIT 200",
+            "SELECT * FROM ws_shortages WHERE customer_id = ? AND (status = 'waiting' OR (status = 'available' AND source != 'request')) "
+            "ORDER BY status = 'available' DESC, id DESC LIMIT 200",
             (customer_id,),
         )
     ]
@@ -980,7 +981,13 @@ def mark_available(conn: sqlite3.Connection, product_id: int) -> int:
     return len({r["customer_id"] for r in rows})
 
 
-def close_request(conn: sqlite3.Connection, shortage_id: int, product_id: Optional[int], message: str = "") -> None:
+def close_request(conn: sqlite3.Connection, shortage_id: int, product_id: Optional[int], message: str = "") -> int:
+    """Answer a provision request. Returns how many traders were told.
+
+    Linking to a product answers every waiting request with the same name (any trader, any unit):
+    the same words mean the same item. The answered requests leave the traders' shortages lists and
+    notebooks; the notification takes them to the product.
+    """
     row = conn.execute("SELECT * FROM ws_shortages WHERE id = ? AND product_id IS NULL", (shortage_id,)).fetchone()
     if not row:
         raise WholesaleError("طلب التوفير مش موجود.", 404)
@@ -989,12 +996,26 @@ def close_request(conn: sqlite3.Connection, shortage_id: int, product_id: Option
         product = conn.execute("SELECT name FROM ws_products WHERE id = ?", (product_id,)).fetchone()
         if not product:
             raise WholesaleError("الصنف مش موجود.", 404)
-        conn.execute("UPDATE ws_shortages SET status = 'available', product_id = ?, notified_at = ? WHERE id = ?", (product_id, now, shortage_id))
-        notify(conn, row["customer_id"], "available", f"«{product['name']}» بقى متوفر", "الصنف اللي طلبت توفيره موجود دلوقتي.", product_id=product_id)
+        key = normalize_name(row["name"])
+        same = [
+            r for r in conn.execute(
+                "SELECT id, customer_id, name FROM ws_shortages WHERE source = 'request' AND status = 'waiting' AND product_id IS NULL"
+            )
+            if r["id"] == shortage_id or normalize_name(r["name"]) == key
+        ]
+        told = set()
+        for r in same:
+            conn.execute("UPDATE ws_shortages SET status = 'available', product_id = ?, notified_at = ? WHERE id = ?", (product_id, now, r["id"]))
+            if r["customer_id"] not in told:
+                told.add(r["customer_id"])
+                notify(conn, r["customer_id"], "available", f"«{product['name']}» بقى متوفر",
+                       f"الصنف اللي طلبت توفيره («{r['name']}») موجود دلوقتي في الجملة.", product_id=product_id)
+        return len(told)
     else:
         conn.execute("UPDATE ws_shortages SET status = 'closed', notified_at = ? WHERE id = ?", (now, shortage_id))
         if message:
             notify(conn, row["customer_id"], "request", f"بخصوص طلب توفير «{row['name']}»", clean_text(message, 400))
+        return 1 if message else 0
 
 
 # ------------------------------------------------------------- notifications

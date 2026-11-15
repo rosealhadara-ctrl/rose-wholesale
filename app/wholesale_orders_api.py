@@ -205,7 +205,7 @@ def trader_me(request: Request):
 
             data["team_pending"] = pending_count(conn, customer["id"])
             data["available_shortages"] = conn.execute(
-                "SELECT COUNT(*) FROM ws_shortages WHERE customer_id = ? AND status = 'available'", (customer["id"],)
+                "SELECT COUNT(*) FROM ws_shortages WHERE customer_id = ? AND status = 'available' AND source != 'request'", (customer["id"],)
             ).fetchone()[0]
     return data
 
@@ -595,10 +595,10 @@ def admin_close_request(shortage_id: int, payload: CloseRequestIn, request: Requ
     _admin(request)
     try:
         with ws_connect() as conn:
-            wo.close_request(conn, shortage_id, payload.product_id, payload.message)
+            told = wo.close_request(conn, shortage_id, payload.product_id, payload.message)
     except ws.WholesaleError as exc:
         raise _fail(exc)
-    return {"ok": True}
+    return {"ok": True, "notified": told}
 
 
 @router.get("/api/admin/wholesale/trader-accounts")

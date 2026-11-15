@@ -79,13 +79,13 @@ def test_update_remove_moved_and_request_answered(conn, trader):
     juice = next(i for i in nb["items"] if i["client_id"] == "a-000001")
     assert juice["qty"] == 4 and juice["unit"] == "dozen" and juice["note"] == "الكبير"
     assert [i["client_id"] for i in nb["items"]] == ["a-000001", "a-000002"]
-    # the owner answers the provision request with a product
+    # the owner answers the provision request with a product: it is no longer a shortage
     req = conn.execute("SELECT id FROM ws_shortages WHERE source = 'request'").fetchone()[0]
-    wo.close_request(conn, req, p["A2"], "عندنا بسكويت بداله")
-    tissue = next(i for i in wn.notebook(conn, c)["items"] if i["client_id"] == "a-000002")
-    assert tissue["product_id"] == p["A2"] and tissue["orderable"]
-    wn.sync(conn, c, [{"op": "remove", "client_id": "a-000002"}])
-    assert len(wn.notebook(conn, c)["items"]) == 1
+    assert wo.close_request(conn, req, p["A2"], "عندنا بسكويت بداله") == 1
+    nb = wn.notebook(conn, c)
+    assert [i["client_id"] for i in nb["items"]] == ["a-000001"]
+    assert not [s for s in nb["shortages"] if s["source"] == "request"]
+    assert wo.notifications(conn, c)["items"][0]["product_id"] == p["A2"]
 
 
 def test_frequent_and_index(conn, trader):

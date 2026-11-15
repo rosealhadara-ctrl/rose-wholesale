@@ -118,6 +118,11 @@ def _employee(request: Request) -> Dict:
         staff = wt.current_staff(conn, request.cookies.get(wt.SESSION_COOKIE, ""))
     if not staff:
         raise HTTPException(401, "سجّل دخول الأول.")
+    with ws_connect() as conn:
+        try:
+            wt.require_team(conn, staff["owner_id"])
+        except ws.WholesaleError as exc:
+            raise HTTPException(exc.status, str(exc))
     return staff
 
 
@@ -165,6 +170,10 @@ def team_me(request: Request):
         staff = wt.current_staff(conn, request.cookies.get(wt.SESSION_COOKIE, ""))
         if not staff:
             return {"logged_in": False}
+        try:
+            wt.require_team(conn, staff["owner_id"])
+        except ws.WholesaleError:
+            return {"logged_in": False}  # the owner's Rose Plus ended: the login screen says why on the next try
         shop = conn.execute("SELECT shop_name FROM ws_traders WHERE customer_id = ?", (staff["owner_id"],)).fetchone()
         from .wholesale_orders import trader_sections
 

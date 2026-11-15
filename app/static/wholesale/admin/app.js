@@ -1111,8 +1111,8 @@
             if (Number.isInteger(n) && n >= 1 && n <= found.length) pick = found[n - 1];
             else q = answer.trim();
           }
-          await api('POST', `${API}/shortages/${rid}/close`, { product_id: pick.id });
-          toast(`اتربط بـ «${pick.name}» والتاجر اتبلّغ`);
+          const done = await api('POST', `${API}/shortages/${rid}/close`, { product_id: pick.id });
+          toast(`اتربط بـ «${pick.name}» واتبلّغ ${done.notified || 1} تاجر`);
           await loadSummary();
           loadShortages();
         });

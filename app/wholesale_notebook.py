@@ -131,14 +131,15 @@ def reminder_view(conn: sqlite3.Connection, customer_id: int) -> Dict[str, Any]:
 
 
 def notebook(conn: sqlite3.Connection, customer_id: int) -> Dict[str, Any]:
-    # A provision request the owner answered with a product: link the notebook line to it.
+    # A provision request the owner answered (in stock now, or closed): it is no longer a shortage,
+    # so its notebook line goes. The trader was notified and orders it from the catalog.
     conn.execute(
         """
-        UPDATE ws_notebook_items SET product_id = (SELECT s.product_id FROM ws_shortages s WHERE s.id = ws_notebook_items.request_id)
-        WHERE customer_id = ? AND status = 'open' AND product_id IS NULL AND request_id IN (
-            SELECT id FROM ws_shortages WHERE customer_id = ? AND product_id IS NOT NULL)
+        UPDATE ws_notebook_items SET status = 'removed', updated_at = ?
+        WHERE customer_id = ? AND status = 'open' AND request_id IN (
+            SELECT id FROM ws_shortages WHERE customer_id = ? AND status != 'waiting')
         """,
-        (customer_id, customer_id),
+        (utc_now(), customer_id, customer_id),
     )
     rows = [dict(r) for r in conn.execute(
         "SELECT * FROM ws_notebook_items WHERE customer_id = ? AND status = 'open' ORDER BY id", (customer_id,)
