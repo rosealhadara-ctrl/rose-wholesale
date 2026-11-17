@@ -31,7 +31,9 @@
     }
     let data = null;
     try { data = await res.json(); } catch (_) { /* empty */ }
-    if (res.status === 401) { state.me = { logged_in: false }; route(); throw new Error('سجّل دخول الأول'); }
+    // 401 from a page means the session ended; from the login form itself it means a wrong number or password,
+    // so let the server's message through (and keep what the trader typed).
+    if (res.status === 401 && !url.startsWith('/api/wholesale/auth/')) { state.me = { logged_in: false }; route(); throw new Error('سجّل دخول الأول'); }
     if (!res.ok) {
       const err = new Error(data && typeof data.detail === 'string' ? data.detail : 'حصلت مشكلة. جرّب تاني.');
       err.status = res.status;
@@ -196,9 +198,12 @@
       <div class="gate card stack">
         <h2>أهلًا بيك في روز جملة</h2>
         <p class="muted" style="margin:0">ادخل برقم موبايلك وكلمة السر.</p>
-        <label class="field">رقم الموبايل<input type="tel" id="l-phone" inputmode="tel" autocomplete="username tel" dir="ltr"></label>
-        <label class="field">كلمة السر<input type="password" id="l-pass" autocomplete="current-password" dir="ltr"></label>
-        <button class="btn primary block" id="l-go">دخول</button>
+        <form class="stack" id="l-form" method="post" action="#login" novalidate>
+          <label class="field">رقم الموبايل<input type="tel" id="l-phone" name="username" inputmode="tel" autocomplete="username" dir="ltr"></label>
+          <label class="field">كلمة السر<input type="password" id="l-pass" name="password" autocomplete="current-password" dir="ltr"></label>
+          <label class="check"><input type="checkbox" id="l-remember" checked> تذكرني</label>
+          <button class="btn primary block" id="l-go" type="submit">دخول</button>
+        </form>
         <button class="btn block" id="to-signup">تاجر جديد؟ سجّل حساب</button>
         <p class="small muted" style="margin:0">نسيت كلمة السر؟ كلّمنا، وهنبعتلك كلمة سر مؤقتة.</p>
         <a class="btn ghost block" href="#catalog">كمّل تصفّح من غير حساب</a>
@@ -216,12 +221,13 @@
       const phone = document.getElementById('l-phone').value.trim();
       const password = document.getElementById('l-pass').value;
       if (!phone || !password) throw new Error('اكتب رقم الموبايل وكلمة السر');
-      const res = await api('POST', '/api/wholesale/auth/login', { phone, password });
+      const remember = document.getElementById('l-remember').checked;
+      const res = await api('POST', '/api/wholesale/auth/login', { phone, password, remember });
       if (res.must_change_password) sessionStorage.setItem('ws-change-password', '1');
       afterAuth(cart.length ? '#cart' : '#catalog');
     });
-    document.getElementById('l-go').onclick = go;
-    document.getElementById('l-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+    // A real <form> submit, so the browser offers to save the number and password and fills them next time.
+    document.getElementById('l-form').onsubmit = (e) => { e.preventDefault(); go(); };
   }
 
   // After login or signup from #login/#signup, go where the visitor was heading (the cart stays in the browser).
