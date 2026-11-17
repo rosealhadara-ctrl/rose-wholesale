@@ -178,6 +178,23 @@ label.field { display: grid; gap: 6px; font-weight: 500; font-size: 14px; }
 .box-more:hover { text-decoration: underline; }
 
 .acct-btn { text-decoration: none; }
+.acct-caret { display: none; width: 9px; height: 6px; fill: #C9D3E6; align-self: flex-end; margin-bottom: 6px; }
+@media (min-width: 720px) { .acct-caret { display: block; } }
+/* account menu (like Amazon's «الحساب والقوائم») */
+.acct-dim { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 19; }
+.acct-menu { position: fixed; z-index: 20; width: min(460px, calc(100vw - 16px)); max-height: calc(100vh - 90px); overflow-y: auto; background: #fff; color: var(--ink); border-radius: 10px; box-shadow: 0 12px 32px rgba(15,23,42,.28); padding: 16px 18px; }
+.acct-menu::before { content: ""; position: absolute; top: -7px; left: var(--arrow-x, 40px); width: 14px; height: 14px; background: #fff; transform: rotate(45deg); border-radius: 2px; }
+.acct-menu-head { display: grid; justify-items: center; gap: 6px; padding-bottom: 14px; margin-bottom: 12px; border-bottom: 1px solid var(--line); text-align: center; }
+.acct-menu-head .btn { width: min(240px, 100%); }
+.acct-menu-head b { font-size: 16px; }
+.acct-menu-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; }
+.acct-menu-cols > div + div { border-inline-start: 1px solid var(--line); padding-inline-start: 18px; }
+.acct-menu h4 { margin: 0 0 6px; font-size: 16px; }
+.acct-menu a.mi, .acct-menu button.mi { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 36px; padding: 4px 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 14px; text-align: start; text-decoration: none; cursor: pointer; }
+.acct-menu .mi:hover, .acct-menu .mi:focus-visible { color: var(--accent); text-decoration: underline; }
+.acct-menu .mi .num-pill { margin-inline-start: auto; min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--pink); color: var(--header); font-size: 12px; font-weight: 700; text-align: center; text-decoration: none; }
+.acct-menu .mi.out { color: #B42318; }
+@media (max-width: 420px) { .acct-menu-cols { grid-template-columns: 1fr; } .acct-menu-cols > div + div { border-inline-start: 0; padding-inline-start: 0; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 6px; } }
 .acct-label small { display: block; font-size: 11px; font-weight: 400; color: #DCE3F0; line-height: 1.2; }
 .acct-label b { display: block; font-size: 14px; line-height: 1.2; }
 .status-note { display: block; margin-bottom: 12px; text-decoration: none; }

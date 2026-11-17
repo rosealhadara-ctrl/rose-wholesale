@@ -128,6 +128,7 @@
     state.home = null; // prices follow the account's tier, so reload the storefront rows
     drawCatBar();
     drawDeliverTo();
+    bindAccountMenu();
     const n = state.me.unread || 0;
     const badge = document.getElementById('notif-count');
     badge.hidden = !n;
@@ -150,6 +151,109 @@
     link.href = me.logged_in ? '#account' : '#login';
     link.setAttribute('aria-label', place ? `التوصيل إلى ${place}، غيّر العنوان` : 'حدد عنوان التوصيل');
     link.onclick = () => { if (me.logged_in) sessionStorage.setItem('ws-focus-addr', '1'); };
+  }
+
+  // Amazon-style account menu under «الحساب»: a sign-in box for visitors, then «طلباتك» and «حسابك».
+  function accountMenuHtml() {
+    const me = state.me;
+    const pill = (n) => (n ? `<span class="num-pill num">${n > 99 ? '99+' : int(n)}</span>` : '');
+    const link = (href, label, extra = '', data = '') => `<a class="mi" href="${href}"${data}>${label}${extra}</a>`;
+    if (!me.logged_in) {
+      return `<div class="acct-menu-head">
+          <a class="btn primary" href="#login">تسجيل الدخول</a>
+          <span class="small muted">تاجر جديد؟ <a href="#signup">سجّل حساب من هنا</a></span>
+        </div>
+        <div class="acct-menu-cols">
+          <div><h4>طلباتك</h4>${link('#cart', 'السلة', pill(cart.length))}</div>
+          <div><h4>حسابك</h4>${link('#login', 'طلباتي')}${link('#login', 'دفتر النواقص')}</div>
+        </div>`;
+    }
+    const head = `<div class="acct-menu-head"><b>أهلًا ${esc(me.name || '')}</b>${me.shop_name ? `<span class="small muted">${esc(me.shop_name)}</span>` : ''}</div>`;
+    if (me.trader_status !== 'approved') {
+      return `${head}<div class="acct-menu-cols">
+          <div><h4>طلباتك</h4>${link('#cart', 'السلة', pill(cart.length))}</div>
+          <div><h4>حسابك</h4>${link('#account', 'حالة حسابي')}<button class="mi out" type="button" data-menu-logout>خروج</button></div>
+        </div>`;
+    }
+    const plus = me.plus || {};
+    return `${head}<div class="acct-menu-cols">
+        <div><h4>طلباتك</h4>
+          ${link('#orders', 'طلباتي')}
+          ${link('#cart', 'السلة', pill(cart.length))}
+          ${link('#shortages', 'دفتر النواقص', pill(me.available_shortages))}
+          ${link('#notifications', 'الإشعارات', pill(me.unread))}
+        </div>
+        <div><h4>حسابك</h4>
+          ${link('#account', 'حسابي')}
+          ${link('#account', 'عنوان التوصيل', '', ' data-menu-focus="addr"')}
+          ${link('#account', 'نقاطي والآجل')}
+          ${plus.active || plus.enabled ? link('#plus', 'روز بلس', plus.active ? '' : ' <span class="plus-badge">بلس</span>') : ''}
+          ${hasPlus() ? link('#team', 'فريقي', pill(me.team_pending)) : ''}
+          ${link('#account', 'شكوى أو اقتراح', '', ' data-menu-focus="fb-box"')}
+          <button class="mi out" type="button" data-menu-logout>خروج</button>
+        </div>
+      </div>`;
+  }
+
+  let acctMenuReady = false;
+  function bindAccountMenu() {
+    if (acctMenuReady) return;
+    acctMenuReady = true;
+    const btn = document.getElementById('top-account');
+    const menu = document.getElementById('acct-menu');
+    const dim = document.getElementById('acct-dim');
+    let hoverTimer = 0;
+    const place = () => {
+      const r = btn.getBoundingClientRect();
+      const w = menu.offsetWidth;
+      const left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8));
+      menu.style.top = `${Math.round(r.bottom + 8)}px`;
+      menu.style.left = `${Math.round(left)}px`;
+      menu.style.setProperty('--arrow-x', `${Math.round(r.left + r.width / 2 - left - 7)}px`);
+    };
+    const open = () => {
+      clearTimeout(hoverTimer);
+      if (!menu.hidden) return;
+      menu.innerHTML = accountMenuHtml();
+      menu.hidden = false;
+      dim.hidden = false;
+      btn.setAttribute('aria-expanded', 'true');
+      place();
+    };
+    const close = (focusBack) => {
+      clearTimeout(hoverTimer);
+      if (menu.hidden) return;
+      menu.hidden = true;
+      dim.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+      if (focusBack) btn.focus();
+    };
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (menu.hidden) { open(); const first = menu.querySelector('a, button'); if (first && e.detail === 0) first.focus(); } else close();
+    });
+    if (window.matchMedia('(hover: hover)').matches) {
+      const later = () => { clearTimeout(hoverTimer); hoverTimer = setTimeout(() => close(), 250); };
+      btn.addEventListener('mouseenter', () => { clearTimeout(hoverTimer); hoverTimer = setTimeout(open, 120); });
+      btn.addEventListener('mouseleave', later);
+      menu.addEventListener('mouseenter', () => clearTimeout(hoverTimer));
+      menu.addEventListener('mouseleave', later);
+    }
+    dim.addEventListener('click', () => close());
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !menu.hidden) close(true); });
+    window.addEventListener('hashchange', () => close());
+    window.addEventListener('resize', () => { if (!menu.hidden) place(); });
+    menu.addEventListener('click', (e) => {
+      const out = e.target.closest('[data-menu-logout]');
+      if (out) { close(); run(null, logout); return; }
+      const a = e.target.closest('a');
+      if (!a) return;
+      const target = a.dataset.menuFocus;
+      if (target) sessionStorage.setItem(target === 'addr' ? 'ws-focus-addr' : 'ws-scroll-to', target);
+      close();
+      // already on that page: the hash doesn't change, so draw it again to reach the section
+      if (a.getAttribute('href') === location.hash && target) route();
+    });
   }
 
   let routeSeq = 0;
@@ -1441,6 +1545,12 @@
       if (!box || !list.length) return;
       box.innerHTML = list.map((f) => `<div class="notice" style="margin-top:8px"><b>${f.kind === 'complaint' ? 'شكوى' : 'اقتراح'}${f.order_number ? ` · طلب ${f.order_number}` : ''} <span class="status ${f.status === 'resolved' ? 'done' : 'open'}">${f.status === 'resolved' ? 'اتحلّت' : 'مفتوحة'}</span></b><span class="small">${esc(f.text)}</span>${f.reply ? `<span class="alert good small">ردّنا: ${esc(f.reply)}</span>` : ''}<time>${when(f.created_at)}</time></div>`).join('');
     }).catch(() => {});
+    const scrollTo = sessionStorage.getItem('ws-scroll-to');
+    if (scrollTo) {
+      sessionStorage.removeItem('ws-scroll-to');
+      const box = document.getElementById(scrollTo);
+      if (box) box.scrollIntoView({ block: 'start' });
+    }
     if (sessionStorage.getItem('ws-focus-addr')) {
       sessionStorage.removeItem('ws-focus-addr');
       const addr = document.getElementById('addr');
