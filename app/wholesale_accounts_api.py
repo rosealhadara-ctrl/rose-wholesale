@@ -58,6 +58,7 @@ class SignupIn(BaseModel):
 class LoginIn(BaseModel):
     phone: str = Field(max_length=30)
     password: str = Field(max_length=128)
+    remember: bool = True  # «تذكرني»: stay signed in for weeks; off = until the browser closes
 
 
 class PasswordIn(BaseModel):
@@ -123,11 +124,11 @@ def trader_login(payload: LoginIn, request: Request, response: Response):
     try:
         with connect() as conn:
             customer = ca.authenticate(conn, payload.phone, payload.password)
-            raw = ca.create_session(conn, customer["id"])
+            raw = ca.create_session(conn, customer["id"], payload.remember)
     except ca.AccountError as exc:
         _failed(request)
         raise _account_fail(exc)
-    ca.set_session_cookie(response, raw)
+    ca.set_session_cookie(response, raw, payload.remember)
     return {"ok": True, "must_change_password": bool(customer["must_change_password"])}
 
 

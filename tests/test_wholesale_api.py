@@ -94,3 +94,24 @@ def test_wholesale_admin_flow(tmp_path, monkeypatch):
         assert client.get("/api/wholesale/catalog").status_code == 200
         assert client.post("/api/wholesale/cart/check", json=cart).json()["checkout"] is None
         assert client.post("/api/wholesale/orders", json=cart).status_code == 403
+
+
+def test_trader_login_remember_me(tmp_path, monkeypatch):
+    monkeypatch.setenv("WHOLESALE_DB_PATH", str(tmp_path / "ws-remember.db"))
+    from app.main import app
+
+    with TestClient(app) as client:
+        assert client.post("/api/wholesale/auth/signup", json={
+            "name": "تاجر", "phone": "01022223333", "password": "Trader-pass-1",
+            "shop_name": "محل", "area": "المعادي", "address": "",
+        }).status_code == 200
+        client.post("/api/wholesale/auth/logout")
+
+        kept = client.post("/api/wholesale/auth/login", json={"phone": "01022223333", "password": "Trader-pass-1"})
+        assert kept.status_code == 200, kept.text
+        assert "max-age=" in kept.headers["set-cookie"].lower()
+
+        short = client.post("/api/wholesale/auth/login", json={"phone": "01022223333", "password": "Trader-pass-1", "remember": False})
+        assert short.status_code == 200, short.text
+        assert "max-age=" not in short.headers["set-cookie"].lower()
+        assert client.get("/api/wholesale/me").json()["logged_in"] is True

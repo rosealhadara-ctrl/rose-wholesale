@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
-  <link rel="stylesheet" href="/static/wholesale/trader/trader.css?v=17">
-  <script src="/static/wholesale/trader/trader.js?v=24" defer></script>
+  <link rel="stylesheet" href="/static/wholesale/trader/trader.css?v=18">
+  <script src="/static/wholesale/trader/trader.js?v=26" defer></script>
   <script src="/static/wholesale/pw-toggle.js?v=2" defer></script>
 </head>
 <body>
@@ -31,9 +31,10 @@
         </button>
       </form>
       <span class="top-actions">
-      <a class="icon-btn cart-btn acct-btn" id="top-account" href="#login" hidden>
+      <a class="icon-btn cart-btn acct-btn" id="top-account" href="#login" aria-haspopup="true" aria-expanded="false" aria-controls="acct-menu" hidden>
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>
         <span class="cart-label acct-label"><small id="top-account-hi">أهلًا، سجّل دخولك</small><b id="top-account-label">الحساب</b></span>
+        <svg class="acct-caret" viewBox="0 0 10 6" aria-hidden="true"><path d="M0 0h10L5 6z"/></svg>
       </a>
       <button class="icon-btn" id="top-chat" aria-label="المحادثات" hidden>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4V5Z"/><path d="M8 9h8M8 12h5"/></svg>
@@ -49,6 +50,9 @@
       </span>
     </div>
   </header>
+  <!-- Amazon-style account menu, opened from «الحساب» in the header -->
+  <div class="acct-dim" id="acct-dim" hidden></div>
+  <nav class="acct-menu" id="acct-menu" aria-label="قايمة الحساب" hidden></nav>
   <nav class="cat-bar" id="cat-bar" aria-label="الأقسام" hidden></nav>
 
   <main id="view" aria-live="polite"></main>

@@ -23,6 +23,8 @@ from .db import connect, utc_now
 
 SESSION_COOKIE = "rose_ws_session"
 SESSION_DAYS = max(1, int(os.getenv("WHOLESALE_SESSION_DAYS", "30")))
+# Without «تذكرني» the cookie dies with the browser, and the server forgets the session after a day anyway.
+SHORT_SESSION_HOURS = 24
 MAX_FAILED = 5
 LOCK_MINUTES = 15
 
@@ -112,20 +114,21 @@ def authenticate(conn: sqlite3.Connection, phone: str, password: str) -> Dict[st
     return dict(row)
 
 
-def create_session(conn: sqlite3.Connection, customer_id: int) -> str:
+def create_session(conn: sqlite3.Connection, customer_id: int, remember: bool = True) -> str:
     raw = secrets.token_urlsafe(32)
     now = _now()
+    life = timedelta(days=SESSION_DAYS) if remember else timedelta(hours=SHORT_SESSION_HOURS)
     conn.execute("DELETE FROM customer_sessions WHERE expires_at <= ?", (_iso(now),))
     conn.execute(
         "INSERT INTO customer_sessions(customer_id, token_hash, expires_at, created_at, last_seen_at) VALUES(?, ?, ?, ?, ?)",
-        (int(customer_id), hashlib.sha256(raw.encode()).hexdigest(), _iso(now + timedelta(days=SESSION_DAYS)), _iso(now), _iso(now)),
+        (int(customer_id), hashlib.sha256(raw.encode()).hexdigest(), _iso(now + life), _iso(now), _iso(now)),
     )
     return raw
 
 
-def set_session_cookie(response: Response, raw: str) -> None:
+def set_session_cookie(response: Response, raw: str, remember: bool = True) -> None:
     response.set_cookie(
-        SESSION_COOKIE, raw, max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax",
+        SESSION_COOKIE, raw, max_age=SESSION_DAYS * 86400 if remember else None, httponly=True, samesite="lax",
         secure=os.getenv("WHOLESALE_COOKIE_SECURE", "0") == "1", path="/",
     )
 
