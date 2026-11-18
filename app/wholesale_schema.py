@@ -681,6 +681,8 @@ CREATE TABLE IF NOT EXISTS ws_picker_sessions (
 
 # Columns added to tables that may already exist from an earlier phase.
 ADDED_COLUMNS = [
+    # 0 = only written in the notebook; 1 = the trader said "yes, I need it" (older rows count as confirmed)
+    ("ws_shortages", "confirmed", "INTEGER NOT NULL DEFAULT 1"),
     ("ws_orders", "payment_method", "TEXT NOT NULL DEFAULT 'cash'"),
     ("ws_orders", "payment_status", "TEXT NOT NULL DEFAULT 'unpaid'"),
     ("ws_orders", "delivery_fee", "REAL NOT NULL DEFAULT 0"),

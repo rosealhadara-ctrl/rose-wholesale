@@ -181,12 +181,21 @@ label.field { display: grid; gap: 6px; font-weight: 500; font-size: 14px; }
 .acct-caret { display: none; width: 9px; height: 6px; fill: #C9D3E6; align-self: flex-end; margin-bottom: 6px; }
 @media (min-width: 720px) { .acct-caret { display: block; } }
 /* account menu (like Amazon's «الحساب والقوائم») */
-.acct-dim { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 19; }
-.acct-menu { position: fixed; z-index: 20; width: min(460px, calc(100vw - 16px)); max-height: calc(100vh - 90px); overflow-y: auto; background: #fff; color: var(--ink); border-radius: 10px; box-shadow: 0 12px 32px rgba(15,23,42,.28); padding: 16px 18px; }
+.acct-dim { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 9; } /* under the header, so «الحساب» stays hoverable */
+/* while the menu is open the header sits above the dim, so the pointer stays "on" the button (no open/close loop) */
+body.acct-open .top { z-index: 20; }
+.acct-menu { position: fixed; z-index: 21; width: min(460px, calc(100vw - 16px)); max-height: calc(100vh - 90px); overflow-y: auto; background: #fff; color: var(--ink); border-radius: 10px; box-shadow: 0 12px 32px rgba(15,23,42,.28); padding: 16px 18px; }
 .acct-menu::before { content: ""; position: absolute; top: -7px; left: var(--arrow-x, 40px); width: 14px; height: 14px; background: #fff; transform: rotate(45deg); border-radius: 2px; }
 .acct-menu-head { display: grid; justify-items: center; gap: 6px; padding-bottom: 14px; margin-bottom: 12px; border-bottom: 1px solid var(--line); text-align: center; }
 .acct-menu-head .btn { width: min(240px, 100%); }
 .acct-menu-head b { font-size: 16px; }
+/* a bridge over the gap between «الحساب» and the menu, so moving the mouse down doesn't close it */
+.acct-menu::after { content: ""; position: absolute; top: -12px; inset-inline: 0; height: 12px; }
+.ask-dialog { border: 0; border-radius: 14px; padding: 20px; width: min(420px, calc(100vw - 32px)); color: var(--ink); box-shadow: 0 16px 40px rgba(15,23,42,.3); }
+.ask-dialog::backdrop { background: rgba(15,23,42,.5); }
+.ask-dialog h3 { margin: 0 0 10px; }
+.ask-dialog ul { margin: 0 0 12px; padding-inline-start: 20px; display: grid; gap: 4px; }
+.ask-dialog .stack { margin-top: 16px; }
 .acct-menu-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; }
 .acct-menu-cols > div + div { border-inline-start: 1px solid var(--line); padding-inline-start: 18px; }
 .acct-menu h4 { margin: 0 0 6px; font-size: 16px; }
