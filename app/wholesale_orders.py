@@ -849,7 +849,7 @@ def customer_shortages(conn: sqlite3.Connection, customer_id: int) -> List[Dict[
     rows = [
         dict(r)
         for r in conn.execute(
-            "SELECT * FROM ws_shortages WHERE customer_id = ? AND (status = 'waiting' OR (status = 'available' AND source != 'request')) "
+            "SELECT * FROM ws_shortages WHERE customer_id = ? AND confirmed = 1 AND (status = 'waiting' OR (status = 'available' AND source != 'request')) "
             "ORDER BY status = 'available' DESC, id DESC LIMIT 200",
             (customer_id,),
         )
@@ -936,7 +936,7 @@ def admin_shortages(conn: sqlite3.Connection, supplier_id: Optional[int] = None)
         """
         SELECT sh.*, c.name AS customer_name, c.phone, t.shop_name FROM ws_shortages sh
         JOIN customers c ON c.id = sh.customer_id LEFT JOIN ws_traders t ON t.customer_id = sh.customer_id
-        WHERE sh.status = 'waiting' AND sh.product_id IS NULL ORDER BY sh.id DESC LIMIT 300
+        WHERE sh.status = 'waiting' AND sh.product_id IS NULL ORDER BY sh.confirmed DESC, sh.id DESC LIMIT 300
         """
     ):
         requests.append({**dict(r), "unit_label": UNIT_LABELS.get(r["unit"], "")})

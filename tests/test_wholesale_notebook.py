@@ -54,13 +54,24 @@ def test_sync_is_idempotent_and_matches_products(conn, trader):
     assert items["عصير جوافة"]["orderable"] and items["عصير جوافة"]["price"] == 110
     assert items["بسكويت"]["product_id"] == p["A2"] and items["بسكويت"]["qty"] == 30
     oil = items["زيت عباد الشمس"]
-    assert not oil["orderable"] and oil["is_request"]
+    assert not oil["orderable"] and not oil["is_request"] and oil["can_request"]
+    assert not items["بسكويت"]["can_request"]
     assert again["estimate"] == 2 * 110 + 30 * 5
-    requests = conn.execute("SELECT COUNT(*) FROM ws_shortages WHERE source = 'request'").fetchone()[0]
-    assert requests == 1
+    # the owner sees it right away as "written in the notebook", not yet confirmed
+    count = lambda: conn.execute("SELECT COUNT(*) FROM ws_shortages WHERE source = 'request'").fetchone()[0]
+    confirmed = lambda: conn.execute("SELECT confirmed FROM ws_shortages WHERE source = 'request'").fetchone()[0]
+    assert count() == 1 and confirmed() == 0
+    assert [r["confirmed"] for r in wo.admin_shortages(conn)["requests"]] == [0]
+    assert not [s for s in again["shortages"] if s["source"] == "request"]  # not in the trader's own list yet
+    nb = wn.sync(conn, c, [{"op": "request", "client_id": "n-000003"}, {"op": "request", "client_id": "n-000002"}])
+    assert count() == 1 and confirmed() == 1 and nb["applied"] == 1  # the matched biscuit is not a request
+    assert [s["name"] for s in nb["shortages"] if s["source"] == "request"] == ["زيت عباد الشمس"]
+    oil = next(i for i in nb["items"] if i["client_id"] == "n-000003")
+    assert oil["is_request"] and not oil["can_request"]
+    assert wn.sync(conn, c, [{"op": "request", "client_id": "n-000003"}])["applied"] == 0  # sent twice
     # a second line with the same missing name does not duplicate the request
-    wn.sync(conn, c, [{"op": "add", "client_id": "n-000004", "name": "زيت عباد  الشمس"}])
-    assert conn.execute("SELECT COUNT(*) FROM ws_shortages WHERE source = 'request'").fetchone()[0] == 1
+    wn.sync(conn, c, [{"op": "add", "client_id": "n-000004", "name": "زيت عباد  الشمس"}, {"op": "request", "client_id": "n-000004"}])
+    assert count() == 1
 
 
 def test_update_remove_moved_and_request_answered(conn, trader):
@@ -73,6 +84,7 @@ def test_update_remove_moved_and_request_answered(conn, trader):
     nb = wn.sync(conn, c, [
         {"op": "update", "client_id": "a-000001", "qty": 4, "unit": "dozen", "note": "الكبير"},
         {"op": "moved", "client_id": "a-000003"},
+        {"op": "request", "client_id": "a-000002"},  # the trader agreed to tell us about the tissues
         {"op": "update", "client_id": "a-000003", "qty": 9},  # after moving: ignored
         {"op": "remove", "client_id": "missing-1"},
     ])
@@ -126,3 +138,14 @@ def test_reminder_once_a_week_and_calendar(conn, trader):
     assert all(len(line.encode()) <= 75 for line in ics.split("\r\n"))
     wn.set_reminder(conn, c, None)
     assert not wn.check_reminder(conn, c, thursday + timedelta(days=14, minutes=1))
+
+
+def test_erasing_an_unconfirmed_line_takes_it_off_the_owner_list(conn, trader):
+    c = trader["c"]
+    wn.sync(conn, c, [{"op": "add", "client_id": "e-000001", "name": "مناديل كبيرة"},
+                      {"op": "add", "client_id": "e-000002", "name": "شاي ناعم"},
+                      {"op": "request", "client_id": "e-000002"}])
+    assert len(wo.admin_shortages(conn)["requests"]) == 2
+    wn.sync(conn, c, [{"op": "remove", "client_id": "e-000001"}, {"op": "remove", "client_id": "e-000002"}])
+    left = wo.admin_shortages(conn)["requests"]
+    assert [r["name"] for r in left] == ["شاي ناعم"]  # the confirmed one stays for the owner

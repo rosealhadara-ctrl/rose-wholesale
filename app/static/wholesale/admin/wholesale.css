@@ -247,3 +247,8 @@ tbody tr.on { background: #EAF1FB; }
 .rc.reported { justify-self: end; }
 .rc.system { justify-self: center; background: transparent; border: 0; color: var(--muted); }
 .rc.flagged { border-color: var(--red); background: var(--red-bg); }
+
+/* provision requests: written in the notebook vs confirmed by the trader */
+.pill.req-yes, .pill.req-note { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.pill.req-yes { background: #FFE8CC; color: #9A3412; }
+.pill.req-note { background: #EEF1F6; color: #5A6478; }

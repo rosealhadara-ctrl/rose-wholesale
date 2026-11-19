@@ -1058,14 +1058,16 @@
       </section>
       <section class="card">
         <h3 style="margin-bottom:10px">طلبات توفير (أصناف مش عندنا)</h3>
-        <p class="small muted" style="margin-top:0">دي بتعرّفك السوق عايز إيه. لو وفّرت الصنف، اربطه بالصنف عندك والتاجر هيتبلّغ.</p>
+        <p class="small muted" style="margin-top:0">دي بتعرّفك السوق عايز إيه. لو وفّرت الصنف، اربطه بالصنف عندك والتاجر هيتبلّغ.
+          «كتبه في الدفتر» يعني التاجر سجّله في دفتر النواقص بس، و«أكّد إنه محتاجه» يعني لما حوّل الدفتر لطلب قال إنه عايزه.</p>
         ${data.requests.length ? `<div class="table-wrap"><table>
-          <thead><tr><th>الصنف المطلوب</th><th>الكمية</th><th>التاجر</th><th>التاريخ</th><th></th></tr></thead>
+          <thead><tr><th>الصنف المطلوب</th><th>الكمية</th><th>التاجر</th><th>الحالة</th><th>التاريخ</th><th></th></tr></thead>
           <tbody>${data.requests.map((r) => `
             <tr data-rid="${r.id}">
               <td class="name-cell"><b>${esc(r.name)}</b>${r.note ? `<span class="meta">${esc(r.note)}</span>` : ''}</td>
               <td>${r.qty} ${esc(r.unit_label)}</td>
               <td class="name-cell"><b>${esc(r.shop_name || r.customer_name)}</b><span class="meta num">${esc(r.phone)}</span></td>
+              <td>${r.confirmed ? '<span class="pill req-yes">أكّد إنه محتاجه</span>' : '<span class="pill req-note">كتبه في الدفتر</span>'}</td>
               <td class="small">${dateText(r.created_at)}</td>
               <td><div class="row" style="gap:4px"><button class="btn sm" data-link>اتوفر، اربطه</button><button class="btn sm ghost" data-close-req>قفل</button></div></td>
             </tr>`).join('')}</tbody></table></div>`

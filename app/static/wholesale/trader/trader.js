@@ -203,11 +203,12 @@
     const menu = document.getElementById('acct-menu');
     const dim = document.getElementById('acct-dim');
     let hoverTimer = 0;
+    let hoverOpened = false; // opened by hovering just now: the click that follows keeps it open
     const place = () => {
       const r = btn.getBoundingClientRect();
       const w = menu.offsetWidth;
       const left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8));
-      menu.style.top = `${Math.round(r.bottom + 8)}px`;
+      menu.style.top = `${Math.round(r.bottom + 10)}px`;
       menu.style.left = `${Math.round(left)}px`;
       menu.style.setProperty('--arrow-x', `${Math.round(r.left + r.width / 2 - left - 7)}px`);
     };
@@ -217,6 +218,7 @@
       menu.innerHTML = accountMenuHtml();
       menu.hidden = false;
       dim.hidden = false;
+      document.body.classList.add('acct-open');
       btn.setAttribute('aria-expanded', 'true');
       place();
     };
@@ -225,16 +227,18 @@
       if (menu.hidden) return;
       menu.hidden = true;
       dim.hidden = true;
+      document.body.classList.remove('acct-open');
       btn.setAttribute('aria-expanded', 'false');
       if (focusBack) btn.focus();
     };
     btn.addEventListener('click', (e) => {
       e.preventDefault();
-      if (menu.hidden) { open(); const first = menu.querySelector('a, button'); if (first && e.detail === 0) first.focus(); } else close();
+      if (menu.hidden) { open(); const first = menu.querySelector('a, button'); if (first && e.detail === 0) first.focus(); } else if (!hoverOpened) close();
+      hoverOpened = false;
     });
     if (window.matchMedia('(hover: hover)').matches) {
-      const later = () => { clearTimeout(hoverTimer); hoverTimer = setTimeout(() => close(), 250); };
-      btn.addEventListener('mouseenter', () => { clearTimeout(hoverTimer); hoverTimer = setTimeout(open, 120); });
+      const later = () => { clearTimeout(hoverTimer); hoverTimer = setTimeout(() => close(), 400); };
+      btn.addEventListener('mouseenter', () => { clearTimeout(hoverTimer); hoverTimer = setTimeout(() => { if (menu.hidden) { open(); hoverOpened = true; setTimeout(() => { hoverOpened = false; }, 600); } }, 120); });
       btn.addEventListener('mouseleave', later);
       menu.addEventListener('mouseenter', () => clearTimeout(hoverTimer));
       menu.addEventListener('mouseleave', later);
@@ -1633,6 +1637,8 @@
     } else if (op.op === 'update' && i >= 0) {
       Object.assign(items[i], { unit: op.unit ?? items[i].unit, qty: op.qty ?? items[i].qty, pending: true });
       if (items[i].units) { items[i].price = items[i].units[items[i].unit] ?? null; items[i].orderable = items[i].price != null; }
+    } else if (op.op === 'request' && i >= 0) {
+      Object.assign(items[i], { is_request: true, can_request: false });
     } else if ((op.op === 'remove' || op.op === 'moved') && i >= 0) {
       items.splice(i, 1);
     }
@@ -1763,7 +1769,7 @@
       drawUnits();
     }));
     hint.hidden = !!hits.length || !!nbChoice;
-    hint.textContent = 'الصنف ده مش عندنا. هيتسجّل «طلب توفير» ونبلغك لو وفّرناه.';
+    hint.textContent = 'الصنف ده مش عندنا دلوقتي. سجّله في الدفتر، ولما تحوّل الدفتر لطلب هنسألك لو عايز تعرّفنا إنك محتاجه.';
   }
 
   function saveLine() {
@@ -1858,11 +1864,12 @@
     // lines
     const estimate = nb.items.reduce((s, x) => s + (x.orderable && x.price ? x.price * x.qty : 0), 0);
     const ready = nb.items.filter((x) => x.orderable);
+    const askable = nb.items.filter((x) => !x.orderable && !x.is_request && !x.has_voice && (x.can_request || x.pending));
     list.innerHTML = nb.items.length ? `
       <section class="card">${nb.items.map((x) => `
         <div class="line nb-line" data-cid="${esc(x.client_id)}">
           <div class="line-top"><div><div class="line-name">${esc(x.name)}</div>
-            <div class="small muted">${x.orderable && x.price != null ? `${money(x.price)} لل${UNIT[x.unit]}` : x.has_voice && !x.product_id ? 'تسجيل صوتي' : x.is_request ? 'مش عندنا · اتسجّل طلب توفير' : x.pending ? 'هيتراجع لما النت يرجع' : 'مش متاح دلوقتي'}${x.note ? ' · ' + esc(x.note) : ''}</div></div>
+            <div class="small muted">${x.orderable && x.price != null ? `${money(x.price)} لل${UNIT[x.unit]}` : x.has_voice && !x.product_id ? 'تسجيل صوتي' : x.is_request ? 'مش عندنا · بلّغت الإدارة إنك محتاجه' : x.can_request ? 'مش عندنا دلوقتي' : x.pending ? 'هيتراجع لما النت يرجع' : 'مش متاح دلوقتي'}${x.note ? ' · ' + esc(x.note) : ''}</div></div>
             ${x.orderable && x.price != null ? `<b class="num">${money(x.price * x.qty)}</b>` : ''}</div>
           ${x.has_voice ? `<audio controls preload="none" src="${x.voice ? x.voice : x.id ? `/api/wholesale/notebook/items/${x.id}/voice` : ''}"></audio>` : ''}
           <div class="row">
@@ -1874,8 +1881,8 @@
       </section>
       <section class="card stack">
         <div class="totals"><div class="grand"><span>تقدير اللي متاح عندنا (${int(ready.length)} صنف)</span><span class="num">${money(estimate)}</span></div></div>
-        <button class="btn primary block" id="nb-to-cart" ${ready.length ? '' : 'disabled'}>حوّل الدفتر لطلب</button>
-        <p class="small muted" style="margin:0">${online ? 'الأصناف المتاحة بتروح السلة، والباقي بيفضل في الدفتر.' : 'التحويل لطلب محتاج نت. الدفتر محفوظ لحد ما النت يرجع.'}</p>
+        <button class="btn primary block" id="nb-to-cart" ${ready.length || askable.length ? '' : 'disabled'}>حوّل الدفتر لطلب</button>
+        <p class="small muted" style="margin:0">${online ? 'الأصناف المتاحة بتروح السلة. ولو فيه حاجات مش عندنا، هنسألك تحب تعرّفنا إنك محتاجها.' : 'التحويل لطلب محتاج نت. الدفتر محفوظ لحد ما النت يرجع.'}</p>
       </section>` : '<div class="card empty" style="padding:24px"><b>الدفتر فاضي</b><span class="small muted">سجّل أي حاجة تخلص من المحل، حتى لو مفيش نت.</span></div>';
     list.querySelectorAll('.nb-line').forEach((row) => {
       const x = nb.items.find((i) => i.client_id === row.dataset.cid);
@@ -1890,16 +1897,49 @@
       if (!navigator.onLine) throw new Error('التحويل لطلب محتاج نت.');
       await syncNb();
       const moving = nb.items.filter((x) => x.orderable && x.product);
-      if (!moving.length) throw new Error('مفيش أصناف متاحة في الدفتر دلوقتي.');
+      // Items we don't carry: ask before telling the owner (the trader may only be keeping notes).
+      const missing = nb.items.filter((x) => x.can_request);
+      let told = 0;
+      if (missing.length && await askNeedMissing(missing)) {
+        missing.forEach((x) => { nb.ops.push({ op: 'request', client_id: x.client_id }); applyLocal(nb.items, { op: 'request', client_id: x.client_id }); });
+        saveNb();
+        await syncNb();
+        told = missing.length;
+      }
+      if (!moving.length) {
+        if (told) toast(`بلّغنا الإدارة بـ ${int(told)} صنف. هنبلغك أول ما يتوفروا.`);
+        else if (!missing.length) throw new Error('مفيش أصناف متاحة في الدفتر دلوقتي.');
+        drawNotebook();
+        return;
+      }
       moving.forEach((x) => addToCart(x.product, x.unit, x.qty));
       moving.forEach((x) => { nb.ops.push({ op: 'moved', client_id: x.client_id }); applyLocal(nb.items, { op: 'moved', client_id: x.client_id }); });
       saveNb();
       await syncNb();
-      toast(`${int(moving.length)} صنف راحوا السلة`);
+      toast(`${int(moving.length)} صنف راحوا السلة${told ? `، وبلّغنا الإدارة بـ ${int(told)} صنف ناقص` : ''}`);
       location.hash = '#cart';
     });
     drawTools();
     drawSavedShortages();
+  }
+
+  // "تحب تعرّفنا إنك محتاج الحاجات دي؟" — resolves true when the trader says yes.
+  function askNeedMissing(items) {
+    return new Promise((resolve) => {
+      const dlg = document.createElement('dialog');
+      dlg.className = 'ask-dialog';
+      dlg.setAttribute('aria-labelledby', 'ask-title');
+      const shown = items.slice(0, 8);
+      dlg.innerHTML = `<h3 id="ask-title">فيه ${int(items.length)} صنف مش عندنا</h3>
+        <ul>${shown.map((x) => `<li>${esc(x.name)} <span class="muted small num">${int(x.qty)} ${UNIT[x.unit]}</span></li>`).join('')}${items.length > shown.length ? `<li class="muted">و${int(items.length - shown.length)} كمان</li>` : ''}</ul>
+        <p class="muted" style="margin:0">تحب تعرّفنا إنك محتاجهم؟ هنحاول نوفّرهم ونبلغك أول ما يتوفروا.</p>
+        <div class="stack"><button class="btn primary block" value="yes">أيوه، عرّفوا الإدارة</button><button class="btn ghost block" value="no">لا، خليهم في الدفتر بس</button></div>`;
+      document.body.appendChild(dlg);
+      let answer = false;
+      dlg.querySelectorAll('button').forEach((b) => (b.onclick = () => { answer = b.value === 'yes'; dlg.close(); }));
+      dlg.addEventListener('close', () => { dlg.remove(); resolve(answer); });
+      dlg.showModal();
+    });
   }
 
   function drawTools() {

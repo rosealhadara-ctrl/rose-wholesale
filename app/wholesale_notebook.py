@@ -7,8 +7,10 @@ sending the same change twice does nothing new.
 
 A line is linked to a product when the trader picked it from the catalog, or
 when its name matches a product the trader can order. A line that matches
-nothing is also recorded as a provision request (طلب توفير), so the owner sees
-what the market is asking for.
+nothing is recorded right away as a provision request (طلب توفير) marked
+"written in the notebook" (``confirmed = 0``), so the owner sees what the market
+is asking for. When the trader turns the notebook into an order they are asked
+whether they need those items; a yes (the ``request`` op) confirms the request.
 
 Items that were not available in an order are still recorded as shortages
 (``ws_shortages``) and shown on the same page.
@@ -56,7 +58,8 @@ def _orderable(conn: sqlite3.Connection, customer_id: int, product_ids: List[int
     return found
 
 
-def _line(row: Dict[str, Any], products: Dict[int, Dict[str, Any]]) -> Dict[str, Any]:
+def _line(row: Dict[str, Any], products: Dict[int, Dict[str, Any]], asked: Optional[Dict[int, bool]] = None) -> Dict[str, Any]:
+    confirmed = bool((asked or {}).get(row["request_id"]))
     product = products.get(row["product_id"]) if row["product_id"] else None
     unit_info = product["units"].get(row["unit"]) if product else None
     return {
@@ -68,7 +71,8 @@ def _line(row: Dict[str, Any], products: Dict[int, Dict[str, Any]]) -> Dict[str,
         "qty": row["qty"],
         "note": row["note"],
         "has_voice": bool(row["voice_path"]),
-        "is_request": bool(row["request_id"]),
+        "is_request": confirmed,  # the trader told us they need it
+        "can_request": not row["product_id"] and not row["voice_path"] and not confirmed,
         "orderable": bool(unit_info),
         "price": unit_info["price"] if unit_info else None,
         "units": {u: (v["price"] if v else None) for u, v in product["units"].items()} if product else None,
@@ -130,6 +134,16 @@ def reminder_view(conn: sqlite3.Connection, customer_id: int) -> Dict[str, Any]:
     return {"day": day, "hour": hour, "day_label": DAYS[day] if day is not None else "", "days": DAYS}
 
 
+def _requests_state(conn: sqlite3.Connection, ids: List[int]) -> Dict[int, bool]:
+    """request id -> confirmed, for requests still waiting."""
+    ids = [i for i in ids if i]
+    if not ids:
+        return {}
+    marks = ",".join("?" * len(ids))
+    return {r["id"]: bool(r["confirmed"]) for r in conn.execute(
+        f"SELECT id, confirmed FROM ws_shortages WHERE id IN ({marks}) AND status = 'waiting'", ids)}
+
+
 def notebook(conn: sqlite3.Connection, customer_id: int) -> Dict[str, Any]:
     # A provision request the owner answered (in stock now, or closed): it is no longer a shortage,
     # so its notebook line goes. The trader was notified and orders it from the catalog.
@@ -145,7 +159,8 @@ def notebook(conn: sqlite3.Connection, customer_id: int) -> Dict[str, Any]:
         "SELECT * FROM ws_notebook_items WHERE customer_id = ? AND status = 'open' ORDER BY id", (customer_id,)
     )]
     products = _orderable(conn, customer_id, [r["product_id"] for r in rows])
-    lines = [_line(r, products) for r in rows]
+    asked = _requests_state(conn, [r["request_id"] for r in rows])
+    lines = [_line(r, products, asked) for r in rows]
     return {
         "items": lines,
         "estimate": round(sum((l["price"] or 0) * l["qty"] for l in lines), 2),
@@ -183,18 +198,32 @@ def _match_product(conn: sqlite3.Connection, customer_id: int, name: str) -> Opt
     return next(iter(found)) if found else None
 
 
-def _request(conn: sqlite3.Connection, customer_id: int, name: str, unit: str, qty: int, note: str) -> Optional[int]:
-    """Record a provision request once per name while one is still waiting."""
+def _request(conn: sqlite3.Connection, customer_id: int, name: str, unit: str, qty: int, note: str,
+             confirmed: bool = False) -> Optional[int]:
+    """Record a provision request once per name while one is still waiting.
+    ``confirmed``: the trader said they need it (a notebook line alone is not confirmed)."""
     key = normalize_name(name)
     for r in conn.execute(
-        "SELECT id, name FROM ws_shortages WHERE customer_id = ? AND source = 'request' AND status = 'waiting'", (customer_id,)
+        "SELECT id, name, confirmed FROM ws_shortages WHERE customer_id = ? AND source = 'request' AND status = 'waiting'", (customer_id,)
     ):
         if normalize_name(r["name"]) == key:
+            if confirmed and not r["confirmed"]:
+                conn.execute("UPDATE ws_shortages SET confirmed = 1, unit = ?, qty = ? WHERE id = ?", (unit, qty, r["id"]))
             return r["id"]
     return conn.execute(
-        "INSERT INTO ws_shortages(customer_id, product_id, name, unit, qty, source, note, status, created_at) VALUES(?, NULL, ?, ?, ?, 'request', ?, 'waiting', ?)",
-        (customer_id, name, unit, qty, clean_text(note, 300), utc_now()),
+        "INSERT INTO ws_shortages(customer_id, product_id, name, unit, qty, source, note, status, confirmed, created_at) VALUES(?, NULL, ?, ?, ?, 'request', ?, 'waiting', ?, ?)",
+        (customer_id, name, unit, qty, clean_text(note, 300), 1 if confirmed else 0, utc_now()),
     ).lastrowid
+
+
+def _drop_unconfirmed(conn: sqlite3.Connection, request_id: Optional[int]) -> None:
+    """The trader erased the line before saying they need it: take it off the owner's list
+    (unless another open line still points at it)."""
+    if not request_id:
+        return
+    still = conn.execute("SELECT 1 FROM ws_notebook_items WHERE request_id = ? AND status = 'open' LIMIT 1", (request_id,)).fetchone()
+    if not still:
+        conn.execute("UPDATE ws_shortages SET status = 'closed' WHERE id = ? AND status = 'waiting' AND confirmed = 0", (request_id,))
 
 
 def _clean_fields(op: Dict[str, Any]) -> Dict[str, Any]:
@@ -239,6 +268,7 @@ def sync(conn: sqlite3.Connection, customer_id: int, ops: List[Dict[str, Any]],
                 product_id = _match_product(conn, customer_id, name)
             request_id = None
             if not product_id and not voice:
+                # the owner sees it now as "written in the notebook"; the trader confirms later
                 request_id = _request(conn, customer_id, name, fields["unit"], fields["qty"], fields["note"])
             conn.execute(
                 """
@@ -260,11 +290,20 @@ def sync(conn: sqlite3.Connection, customer_id: int, ops: List[Dict[str, Any]],
                 "UPDATE ws_notebook_items SET name = ?, product_id = ?, unit = ?, qty = ?, note = ?, updated_at = ? WHERE id = ?",
                 (name, product_id, fields["unit"], fields["qty"], fields["note"], now, row["id"]),
             )
+        elif kind == "request" and row["status"] == "open":
+            # The trader said yes: tell the owner they need this item we don't carry.
+            if row["product_id"] or row["voice_path"]:
+                continue
+            if row["request_id"] and _requests_state(conn, [row["request_id"]]).get(row["request_id"]):
+                continue  # already confirmed
+            request_id = _request(conn, customer_id, row["name"], row["unit"], row["qty"], row["note"], confirmed=True)
+            conn.execute("UPDATE ws_notebook_items SET request_id = ?, updated_at = ? WHERE id = ?", (request_id, now, row["id"]))
         elif kind in ("remove", "moved") and row["status"] == "open":
             conn.execute(
                 "UPDATE ws_notebook_items SET status = ?, updated_at = ? WHERE id = ?",
                 ("removed" if kind == "remove" else "moved", now, row["id"]),
             )
+            _drop_unconfirmed(conn, row["request_id"])
         else:
             continue
         applied += 1
